@@ -25,6 +25,11 @@ import XCTest
         }
         try await pause(0.4)
         key(.escape)
+        if elements().contains(where: { value($0, kAXRoleAttribute) as? String == "AXWebArea" }),
+           let toggle = elements().first(where: { value($0, "AXIdentifier") as? String == "fixture.webToggle" }) {
+            _ = AXUIElementPerformAction(toggle, kAXPressAction as CFString)
+            try await waitUntil { !self.elements().contains { self.value($0, kAXRoleAttribute) as? String == "AXWebArea" } }
+        }
         for element in elements() where value(element, kAXRoleAttribute) as? String == "AXScrollBar" {
             _ = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, NSNumber(value: 0))
         }
@@ -125,6 +130,11 @@ import XCTest
     }
 
     func testWebKitTargetAndPreciseScroll() async throws {
+        let window = try XCTUnwrap(elements().first { value($0, kAXRoleAttribute) as? String == "AXWindow" })
+        var originalOrigin = try XCTUnwrap(frame(window)).origin
+        var movedOrigin = CGPoint(x: originalOrigin.x - 90, y: originalOrigin.y + 35)
+        XCTAssertEqual(AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &movedOrigin)!), .success)
+        defer { _ = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &originalOrigin)!) }
         let toggle = try XCTUnwrap(elements().first { value($0, "AXIdentifier") as? String == "fixture.webToggle" })
         _ = AXUIElementPerformAction(toggle, kAXPressAction as CFString)
         defer { _ = AXUIElementPerformAction(toggle, kAXPressAction as CFString) }
@@ -136,18 +146,105 @@ import XCTest
         let service = AccessibilityService()
         let targets = try await service.discover(pid: fixture.processIdentifier, mode: .click, screens: screens)
         XCTAssertTrue(targets.contains { TargetPolicy.isUnchanged($0.frame, buttonFrame) })
-        let regions = try await service.discover(pid: fixture.processIdentifier, mode: .scroll, screens: screens)
-        let selected = try XCTUnwrap(regions.filter { $0.frame.contains(CGPoint(x: buttonFrame.midX, y: buttonFrame.midY)) }
-            .min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height })
-        let region = try XCTUnwrap(elements().first { value($0, kAXRoleAttribute) as? String == "AXScrollArea" && frame($0).map { TargetPolicy.isUnchanged($0, selected.frame) } == true })
-        let bar = try XCTUnwrap(value(region, kAXVerticalScrollBarAttribute)).self as! AXUIElement
-        let before = try XCTUnwrap(value(bar, kAXValueAttribute) as? Double)
+        let regions = try await AccessibilityService().discover(pid: fixture.processIdentifier, mode: .scroll, screens: screens)
+        XCTAssertEqual(regions.count, 3, "The page and both nested overflow regions must be reachable.")
+        let group = try XCTUnwrap(elements().first { value($0, kAXDescriptionAttribute) as? String == "Web controls" })
+        let groupFrame = try XCTUnwrap(frame(group))
+        let index = try XCTUnwrap(regions.firstIndex { abs($0.frame.minX - groupFrame.minX) < 1 && abs($0.frame.minY - groupFrame.minY) < 1 })
+        let codes = try HintAssigner.codes(forCount: targets.count)
+        let buttonIndex = try XCTUnwrap(targets.firstIndex { TargetPolicy.isUnchanged($0.frame, buttonFrame) })
+        let validation = await service.revalidate(targets[buttonIndex], screens: screens)
+        XCTAssertNotNil(validation, "A WebKit target behind an unambiguous native wrapper must remain actionable.")
+        key(.j, flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand])
+        try await waitUntil { self.overlayCount() > 0 }
+        try await pause(0.7)
+        try captureFixture("browser-hints")
+        for hint in codes[buttonIndex].keys { key(hint.keyCode); try await pause(0.05) }
+        try await waitUntil { self.textValues().contains { $0.contains("Web clicks: 1") } }
         let pointer = NSEvent.mouseLocation
-        let succeeded = await service.scroll(selected, vector: CGVector(dx: 0, dy: -100), screens: screens, shouldContinue: { true })
-        XCTAssertTrue(succeeded)
-        try await pause(0.15)
-        XCTAssertGreaterThan(try XCTUnwrap(value(bar, kAXValueAttribute) as? Double), before)
+        key(.k, flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand])
+        try await waitUntil { self.overlayCount() > 0 }
+        try await pause(0.5)
+        let digits: [KeyCode] = [.number1, .number2, .number3, .number4, .number5, .number6, .number7, .number8, .number9]
+        key(digits[index])
+        let before = try webPosition()
+        keyDown(.j); try await pause(0.25); keyUp(.j); try await pause(0.1)
+        let down = try webPosition()
+        XCTAssertGreaterThan(down.y, before.y)
+        try await pause(0.2)
+        XCTAssertEqual(try webPosition(), down, "Browser key-up must stop immediately, without momentum.")
+        keyDown(.k); try await pause(0.12); keyUp(.k); try await pause(0.1)
+        XCTAssertLessThan(try webPosition().y, down.y)
+        keyDown(.l); try await pause(0.2); keyUp(.l); try await pause(0.1)
+        let right = try webPosition()
+        XCTAssertGreaterThan(right.x, 0)
+        keyDown(.h); try await pause(0.12); keyUp(.h); try await pause(0.1)
+        XCTAssertLessThan(try webPosition().x, right.x)
+        let dashStart = try webPosition().y
+        keyDown(.j, flags: .maskShift); try await pause(0.15); keyUp(.j); try await pause(0.1)
+        XCTAssertGreaterThan(try webPosition().y - dashStart, down.y - before.y)
+        let firstRegion = try webPosition()
+        key(.tab)
+        keyDown(.j); try await pause(0.2); keyUp(.j); try await pause(0.1)
+        XCTAssertEqual(try webPosition(), firstRegion)
+        XCTAssertGreaterThan(try webPosition(reference: true).y, 0)
+        try captureFixture("browser-scroll")
+        keyDown(.j); try await pause(0.08); key(.escape); try await pause(0.1)
+        let cancelled = try webPosition(reference: true)
+        try await pause(0.2)
+        XCTAssertEqual(try webPosition(reference: true), cancelled, "Escape must cancel a held browser scroll key.")
+        keyUp(.j)
+        XCTAssertEqual(overlayCount(), 0)
+        let heading = try XCTUnwrap(elements().first { value($0, kAXValueAttribute) as? String == "WebKit controls and nested scrolling" })
+        let pageBefore = try XCTUnwrap(frame(heading)).minY
+        let controlsBeforePage = try webPosition()
+        let referenceBeforePage = try webPosition(reference: true)
+        key(.k, flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand])
+        try await waitUntil { self.overlayCount() > 0 }
+        try await pause(0.5)
+        keyDown(.j); try await pause(0.2); keyUp(.j); try await pause(0.1)
+        XCTAssertLessThan(try XCTUnwrap(frame(heading)).minY, pageBefore, "The browser page itself must scroll too.")
+        XCTAssertEqual(try webPosition(), controlsBeforePage)
+        XCTAssertEqual(try webPosition(reference: true), referenceBeforePage)
+        key(.escape)
         XCTAssertEqual(NSEvent.mouseLocation, pointer)
+        XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, fixture.processIdentifier)
+    }
+
+    func testSwitchingWindowsRejectsStaleTargets() async throws {
+        let toggle = try XCTUnwrap(elements().first { value($0, "AXIdentifier") as? String == "fixture.webToggle" })
+        _ = AXUIElementPerformAction(toggle, kAXPressAction as CFString)
+        defer { _ = AXUIElementPerformAction(toggle, kAXPressAction as CFString) }
+        try await waitUntil { self.find(role: "AXButton", title: "Web control 1") != nil }
+        let service = AccessibilityService()
+        let primary = NSScreen.screens.first?.frame.maxY ?? 0
+        let screens = NSScreen.screens.map { ScreenGeometry.cocoaRect(fromQuartz: $0.frame, primaryScreenMaxY: primary) }
+        let targets = try await service.discover(pid: fixture.processIdentifier, mode: .scroll, screens: screens)
+        let target = try XCTUnwrap(targets.last)
+        let point = await service.revalidate(target, screens: screens)
+        XCTAssertNotNil(point)
+        let originalWindow = try XCTUnwrap(value(app, kAXFocusedWindowAttribute)) as! AXUIElement
+        let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        let number = try XCTUnwrap(windows.first { $0[kCGWindowOwnerPID as String] as? pid_t == fixture.processIdentifier && $0[kCGWindowLayer as String] as? Int == 0 }?[kCGWindowNumber as String] as? Int)
+        let before = try webPosition(reference: true)
+        try pressButton("Open second window")
+        try await waitUntil {
+            guard let focused = self.value(self.app, kAXFocusedWindowAttribute) else { return false }
+            return self.value(focused as! AXUIElement, kAXTitleAttribute) as? String == "Second Fixture"
+        }
+        let second = try XCTUnwrap(value(app, kAXFocusedWindowAttribute)) as! AXUIElement
+        defer {
+            if let close = value(second, kAXCloseButtonAttribute) { _ = AXUIElementPerformAction(close as! AXUIElement, kAXPressAction as CFString) }
+            _ = AXUIElementPerformAction(originalWindow, kAXRaiseAction as CFString)
+        }
+        let stale = await service.revalidate(target, screens: screens)
+        XCTAssertNil(stale)
+        let scrolled = await service.scroll(target, vector: CGVector(dx: 0, dy: -100), screens: screens, shouldContinue: { true })
+        XCTAssertFalse(scrolled)
+        XCTAssertFalse(WindowScrollActions.scroll(pid: fixture.processIdentifier, windowNumber: number,
+            at: try XCTUnwrap(point), vector: CGVector(dx: 0, dy: -100), shouldContinue: { true }))
+        try await pause(0.15)
+        XCTAssertEqual(try webPosition(reference: true), before)
     }
 
     func testWarmDiscoverySample() async throws {
@@ -172,14 +269,60 @@ import XCTest
         XCTAssertLessThan(milliseconds[28], 300)
     }
 
+    func testHundredHintDiscoveryAndDrawingBudget() async throws {
+        let window = try XCTUnwrap(value(app, kAXFocusedWindowAttribute)) as! AXUIElement
+        var originalSize = try XCTUnwrap(frame(window)).size
+        var sampleSize = CGSize(width: 1100, height: 850)
+        XCTAssertEqual(AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &sampleSize)!), .success)
+        defer { _ = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &originalSize)!) }
+        try await pause(0.2)
+        let overlay = OverlayController()
+        defer { overlay.hide() }
+        let service = AccessibilityService()
+        let screens = overlay.displays.map(\.quartzFrame)
+        let first = try await service.discover(pid: fixture.processIdentifier, mode: .click, screens: screens)
+        XCTAssertGreaterThanOrEqual(first.count, 100)
+        overlay.showHints(targets: Array(first.prefix(100)), codes: try HintAssigner.codes(forCount: 100), prefix: [], size: .medium)
+        try await pause(0.1)
+        var milliseconds: [Double] = []
+        for _ in 0..<30 {
+            let start = ContinuousClock.now
+            let targets = try await service.discover(pid: fixture.processIdentifier, mode: .click, screens: screens)
+            overlay.showHints(targets: Array(targets.prefix(100)), codes: try HintAssigner.codes(forCount: 100), prefix: [], size: .medium)
+            for panel in NSApplication.shared.windows where panel.level == .popUpMenu {
+                panel.contentView?.displayIfNeeded()
+            }
+            let duration = start.duration(to: .now).components
+            milliseconds.append(Double(duration.seconds) * 1000 + Double(duration.attoseconds) / 1e15)
+        }
+        milliseconds.sort()
+        let result = "30 warm runs; discover \(first.count) fixture targets + draw 100 hints; p50=\(milliseconds[14]) ms; p95=\(milliseconds[28]) ms; max=\(milliseconds[29]) ms. Measures synchronous AppKit drawing, excluding event delivery and compositor presentation.\n"
+        let folder = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".evidence/openrow")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try result.write(to: folder.appendingPathComponent("hundred-hint-performance.txt"), atomically: true, encoding: .utf8)
+        XCTAssertLessThanOrEqual(milliseconds[14], 150)
+        XCTAssertLessThanOrEqual(milliseconds[28], 300)
+        XCTAssertLessThanOrEqual(milliseconds[29], 750)
+    }
+
     private func pause(_ seconds: Double) async throws { try await Task.sleep(for: .seconds(seconds)) }
 
-    private func waitUntil(_ condition: () -> Bool) async throws {
+    private func captureFixture(_ name: String) throws {
+        guard ProcessInfo.processInfo.environment["OPENROW_CAPTURE_EVIDENCE"] == "1" else { return }
+        let windowFrame = try XCTUnwrap(elements().first(where: { value($0, kAXRoleAttribute) as? String == "AXWindow" }).flatMap { frame($0) })
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-R", "\(Int(windowFrame.minX)),\(Int(windowFrame.minY)),\(Int(windowFrame.width)),\(Int(windowFrame.height))", ".evidence/openrow/\(name).png"]
+        try capture.run(); capture.waitUntilExit()
+        XCTAssertEqual(capture.terminationStatus, 0)
+    }
+
+    private func waitUntil(line: UInt = #line, _ condition: () -> Bool) async throws {
         for _ in 0..<60 {
             if condition() { return }
             try await pause(0.05)
         }
-        throw NSError(domain: "NativeFlowTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for the fixture outcome."])
+        throw NSError(domain: "NativeFlowTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for the fixture outcome at line \(line)."])
     }
 
     private func key(_ code: KeyCode, flags: CGEventFlags = []) { keyDown(code, flags: flags); keyUp(code, flags: flags) }
@@ -230,6 +373,14 @@ import XCTest
     private func scrollPosition() throws -> CGPoint {
         let label = try XCTUnwrap(textValues().first { $0.contains("Scroll: x ") })
         let regex = try NSRegularExpression(pattern: "Scroll: x (-?[0-9]+), y (-?[0-9]+)")
+        let match = try XCTUnwrap(regex.firstMatch(in: label, range: NSRange(label.startIndex..., in: label)))
+        let ns = label as NSString
+        return CGPoint(x: Double(ns.substring(with: match.range(at: 1)))!, y: Double(ns.substring(with: match.range(at: 2)))!)
+    }
+    private func webPosition(reference: Bool = false) throws -> CGPoint {
+        let prefix = reference ? "Web reference" : "Web controls"
+        let label = try XCTUnwrap(textValues().first { $0.contains("\(prefix): x ") })
+        let regex = try NSRegularExpression(pattern: "\(prefix): x (-?[0-9]+), y (-?[0-9]+)")
         let match = try XCTUnwrap(regex.firstMatch(in: label, range: NSRange(label.startIndex..., in: label)))
         let ns = label as NSString
         return CGPoint(x: Double(ns.substring(with: match.range(at: 1)))!, y: Double(ns.substring(with: match.range(at: 2)))!)

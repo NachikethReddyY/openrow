@@ -21,6 +21,8 @@ actor AccessibilityService {
         let element: AXUIElement
         let originalFrame: CGRect
         let snapshot: TargetSnapshot
+        let window: AXUIElement
+        let windowNumber: Int?
     }
     private struct Attributes {
         let role: String
@@ -43,7 +45,15 @@ actor AccessibilityService {
             throw DiscoveryError.unavailable
         }
         let windowBounds = attributes(window)?.frame
-        var queue: [(AXUIElement, CGRect?)] = [(window, windowBounds)]
+        let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        let windowNumber = windows.first {
+            guard $0[kCGWindowOwnerPID as String] as? Int32 == pid,
+                  $0[kCGWindowLayer as String] as? Int == 0,
+                  let bounds = $0[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds), let windowBounds else { return false }
+            return TargetPolicy.isUnchanged(windowBounds, frame)
+        }?[kCGWindowNumber as String] as? Int
+        var queue: [(AXUIElement, CGRect?, Bool)] = [(window, windowBounds, false)]
         var cursor = 0
         var seen = Set<CFHashCode>()
         var frames = Set<String>()
@@ -51,37 +61,44 @@ actor AccessibilityService {
         while cursor < queue.count, cursor < 5000 {
             try Task.checkCancellation()
             guard start.duration(to: .now) < .seconds(1.5) else { throw DiscoveryError.timedOut }
-            let (element, clip) = queue[cursor]
+            let (element, clip, insideWeb) = queue[cursor]
             cursor += 1
             guard seen.insert(CFHash(element)).inserted else { continue }
             guard let values = attributes(element), !values.hidden, values.enabled else { continue }
             let frame = values.frame
+            let web = insideWeb || values.role == "AXWebArea"
+            let children = children(of: element, limit: max(0, 5000 - queue.count))
+            // WebKit exposes CSS overflow containers as groups, without scrollbar attributes.
+            // Overflowing child geometry identifies nested viewports; ordinary text groups stay out.
+            let overflow = web && values.role == "AXGroup" && frame.map { viewport in
+                children.contains { child in
+                    guard let content = attributes(child)?.frame else { return false }
+                    return content.width > viewport.width + 2 || content.height > viewport.height + 2 ||
+                        content.minX < viewport.minX - 2 || content.maxX > viewport.maxX + 2 ||
+                        content.minY < viewport.minY - 2 || content.maxY > viewport.maxY + 2
+                }
+            } == true
+            let scrollable = scrollRoles.contains(values.role) || overflow
             var childClip = clip
-            if scrollRoles.contains(values.role), let frame {
+            if scrollable, let frame {
                 childClip = clip.map { $0.intersection(frame) } ?? frame
             }
             if let frame {
                 let visible = clip.map { $0.intersection(frame) } ?? frame
-                let supported = mode == .scroll ? scrollRoles.contains(values.role) : supportsClick(element, role: values.role)
+                let supported = mode == .scroll ? scrollable : supportsClick(element, role: values.role)
                 if supported, values.subrole != "AXSecureTextField",
                    TargetPolicy.isEligible(frame: visible, enabled: values.enabled, hidden: values.hidden, screens: screens) {
                     let signature = "\(Int(visible.minX.rounded())):\(Int(visible.minY.rounded())):\(Int(visible.width.rounded())):\(Int(visible.height.rounded()))"
                     if frames.insert(signature).inserted {
                         let snapshot = TargetSnapshot(id: found.count, pid: pid, frame: visible)
-                        found.append(Entry(element: element, originalFrame: frame, snapshot: snapshot))
+                        found.append(Entry(element: element, originalFrame: frame, snapshot: snapshot,
+                                           window: window, windowNumber: windowNumber))
                         if mode == .click, found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
                     }
                 }
             }
             // Bound the returned children as well as traversal so one wide node cannot allocate unbounded work.
-            let remaining = 5000 - queue.count
-            if remaining > 0 {
-                var children: CFArray?
-                if AXUIElementCopyAttributeValues(element, kAXChildrenAttribute as CFString, 0, remaining, &children) == .success,
-                   let children = children as? [AXUIElement] {
-                    queue.append(contentsOf: children.map { ($0, childClip) })
-                }
-            }
+            queue.append(contentsOf: children.map { ($0, childClip, web) })
             if cursor.isMultiple(of: 24) { await Task.yield() }
         }
         try Task.checkCancellation()
@@ -104,6 +121,8 @@ actor AccessibilityService {
     func revalidate(_ target: TargetSnapshot, screens: [CGRect]) -> CGPoint? {
         guard !Task.isCancelled, let entry = entries[target.id], entry.snapshot.pid == target.pid,
               !isSecure(AXUIElementCreateApplication(target.pid)),
+              let focusedWindow = elementAttribute(AXUIElementCreateApplication(target.pid), kAXFocusedWindowAttribute),
+              CFEqual(focusedWindow, entry.window),
               let current = attributes(entry.element), let frame = current.frame,
               current.subrole != "AXSecureTextField",
               TargetPolicy.isUnchanged(entry.originalFrame, frame),
@@ -115,20 +134,43 @@ actor AccessibilityService {
         var hit: AXUIElement?
         guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hit) == .success,
               var candidate = hit else { return nil }
+        let initialHit = candidate
         for _ in 0..<12 {
             if CFEqual(candidate, entry.element) { return point }
             guard let parent = elementAttribute(candidate, kAXParentAttribute) else { break }
             candidate = parent
         }
+        // NSViewRepresentable hosts can hit-test to their wrapper instead of the embedded WebKit tree.
+        // Descend only through a unique visible child at this point. Ambiguous overlaps fail closed.
+        candidate = initialHit
+        for _ in 0..<12 {
+            var count = 0
+            guard AXUIElementGetAttributeValueCount(candidate, kAXChildrenAttribute as CFString, &count) == .success,
+                  count <= 128 else { return nil }
+            let matching = children(of: candidate, limit: 128).filter {
+                guard let values = attributes($0), values.enabled, !values.hidden,
+                      let frame = values.frame else { return false }
+                return frame.contains(point)
+            }
+            guard matching.count == 1, let next = matching.first, !CFEqual(next, candidate) else { return nil }
+            if CFEqual(next, entry.element) { return point }
+            candidate = next
+        }
         return nil
     }
 
-    /// Scroll through exposed scrollbar positions so the hardware pointer never changes.
+    /// Prefer accessible positions; send window-directed wheels when no writable position is exposed.
     func scroll(_ target: TargetSnapshot, vector: CGVector, screens: [CGRect],
-                shouldContinue: @Sendable () -> Bool) -> Bool {
+                shouldContinue: @escaping @Sendable () -> Bool) async -> Bool {
         guard shouldContinue(), !IsSecureEventInputEnabled(),
-              revalidate(target, screens: screens) != nil, let entry = entries[target.id],
-              let content = contentSize(entry.element), let viewport = attributes(entry.element)?.frame?.size else { return false }
+              let point = revalidate(target, screens: screens), let entry = entries[target.id] else { return false }
+        guard let content = contentSize(entry.element), let viewport = attributes(entry.element)?.frame?.size,
+              hasWritableScrollbars(entry.element, vector: vector, content: content, viewport: viewport) else {
+            guard let windowNumber = entry.windowNumber,
+                  revalidate(target, screens: screens) != nil else { return false }
+            return await WindowScrollActions.scroll(pid: target.pid, windowNumber: windowNumber,
+                at: point, vector: vector, shouldContinue: shouldContinue)
+        }
         for (name, delta, extent, visible) in [
             (kAXHorizontalScrollBarAttribute, vector.dx, content.width, viewport.width),
             (kAXVerticalScrollBarAttribute, vector.dy, content.height, viewport.height)
@@ -154,6 +196,32 @@ actor AccessibilityService {
             }
         }
         return true
+    }
+
+    private func hasWritableScrollbars(_ element: AXUIElement, vector: CGVector, content: CGSize, viewport: CGSize) -> Bool {
+        // A same-sized web area without scrollbars may contain nested scrolling beneath the pointer.
+        var hasBar = false
+        for (name, delta, extent, visible) in [
+            (kAXHorizontalScrollBarAttribute, vector.dx, content.width, viewport.width),
+            (kAXVerticalScrollBarAttribute, vector.dy, content.height, viewport.height)
+        ] where delta != 0 {
+            guard let bar = elementAttribute(element, name) else {
+                if extent > visible { return false }
+                continue
+            }
+            var settable: DarwinBoolean = false
+            guard AXUIElementIsAttributeSettable(bar, kAXValueAttribute as CFString, &settable) == .success,
+                  settable.boolValue else { return false }
+            hasBar = true
+        }
+        return hasBar
+    }
+
+    private func children(of element: AXUIElement, limit: Int) -> [AXUIElement] {
+        guard limit > 0 else { return [] }
+        var children: CFArray?
+        guard AXUIElementCopyAttributeValues(element, kAXChildrenAttribute as CFString, 0, limit, &children) == .success else { return [] }
+        return children as? [AXUIElement] ?? []
     }
 
     private func contentSize(_ element: AXUIElement) -> CGSize? {

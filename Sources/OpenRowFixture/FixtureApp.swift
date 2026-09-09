@@ -10,6 +10,7 @@ import WebKit
 }
 
 struct FixtureView: View {
+    @StateObject private var events = FixtureEvents()
     @State private var clicks = 0
     @State private var last = "None"
     @State private var text = ""
@@ -17,6 +18,7 @@ struct FixtureView: View {
     @State private var web = false
     @State private var hideTarget = false
     @State private var offset = CGPoint.zero
+    @State private var secondWindow: NSWindow?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -32,6 +34,7 @@ struct FixtureView: View {
                 Text("Last control: \(last)").accessibilityIdentifier("fixture.lastControl")
                 Text("Scroll: x \(Int(offset.x)), y \(Int(offset.y))").monospacedDigit().accessibilityIdentifier("fixture.scrollPosition")
             }
+            Text(events.lastScroll).font(.caption.monospaced())
             TextField("Ordinary typing passes through here", text: $text)
                 .textFieldStyle(.roundedBorder).accessibilityIdentifier("fixture.typing")
             HStack {
@@ -39,6 +42,15 @@ struct FixtureView: View {
                 Button("Disabled control") {}.disabled(true)
                 Button(hideTarget ? "Show target" : "Hide target") { hideTarget.toggle() }
                 if !hideTarget { Button("Single click target") { clicked("Single click target") } }
+                Button("Open second window") {
+                    let window = NSWindow(contentRect: NSRect(x: 70, y: 90, width: 260, height: 160),
+                        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+                    window.title = "Second Fixture"
+                    window.contentView = NSHostingView(rootView: Text("Second fixture window"))
+                    window.isReleasedWhenClosed = false
+                    secondWindow = window
+                    window.makeKeyAndOrderFront(nil)
+                }
             }
             if web { WebFixture() }
             else {
@@ -73,6 +85,22 @@ struct FixtureView: View {
     private func clicked(_ title: String) { clicks += 1; last = title }
 }
 
+@MainActor private final class FixtureEvents: ObservableObject {
+    @Published var lastScroll = "Wheel events: 0"
+    private var count = 0
+    private var monitor: Any?
+    init() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.count += 1
+                self.lastScroll = "Wheel events: \(self.count); point: \(event.locationInWindow); delta: \(event.scrollingDeltaX), \(event.scrollingDeltaY)"
+            }
+            return event
+        }
+    }
+}
+
 private struct WebFixture: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let view = WKWebView()
@@ -80,9 +108,11 @@ private struct WebFixture: NSViewRepresentable {
         <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
         <style>:root{color-scheme:light dark}body{font:15px system-ui;margin:18px}button{font:inherit;padding:8px;margin:5px}.regions{display:flex;gap:16px}.region{height:340px;overflow:auto;border:1px solid #888;padding:12px;flex:1}.wide{width:1000px}</style>
         <h2>WebKit controls and nested scrolling</h2><p id="count" role="status">Web clicks: 0</p>
+        <p id="offsets">Web controls: x 0, y 0; Web reference: x 0, y 0</p>
         <div class="regions"><section class="region" aria-label="Web controls"><div class="wide" id="buttons"></div></section>
         <section class="region" aria-label="Nested reference"><div id="reference"></div></section></div>
-        <script>let n=0;for(let i=1;i<=100;i++){const b=document.createElement('button');b.textContent='Web control '+i;b.onclick=()=>{document.querySelector('#count').textContent='Web clicks: '+(++n)};document.querySelector('#buttons').append(b)}for(let i=1;i<=60;i++){const p=document.createElement('p');p.textContent='Reference row '+i;document.querySelector('#reference').append(p)}</script></html>
+        <script>let n=0;for(let i=1;i<=100;i++){const b=document.createElement('button');b.textContent='Web control '+i;b.onclick=()=>{document.querySelector('#count').textContent='Web clicks: '+(++n)};document.querySelector('#buttons').append(b)}for(let i=1;i<=60;i++){const p=document.createElement('p');p.textContent='Reference row '+i;document.querySelector('#reference').append(p)}
+        const regions=[...document.querySelectorAll('.region')];for(const region of regions)region.addEventListener('scroll',()=>{document.querySelector('#offsets').textContent=`Web controls: x ${Math.round(regions[0].scrollLeft)}, y ${Math.round(regions[0].scrollTop)}; Web reference: x ${Math.round(regions[1].scrollLeft)}, y ${Math.round(regions[1].scrollTop)}`})</script></html>
         """, baseURL: nil)
         return view
     }
