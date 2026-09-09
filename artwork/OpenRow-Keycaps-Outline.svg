@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="faceStroke" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.62" stop-color="#E8EBEF"/>
+      <stop offset="1" stop-color="#B7BEC7"/>
+    </linearGradient>
+    <linearGradient id="bodyStroke" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#AEB6BF"/>
+      <stop offset="1" stop-color="#626D78"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Each key is only two clean contours: its cap and its lower shell. -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(0 0)">
+      <path d="M94 430 Q98 386 141 382 H301 Q344 386 348 430 L365 613 Q369 650 329 654 H113 Q73 650 77 613 Z"
+            stroke="url(#bodyStroke)" stroke-width="15"/>
+      <rect x="91" y="365" width="260" height="230" rx="49"
+            stroke="url(#faceStroke)" stroke-width="18"/>
+    </g>
+    <g transform="translate(289 0)">
+      <path d="M94 430 Q98 386 141 382 H301 Q344 386 348 430 L365 613 Q369 650 329 654 H113 Q73 650 77 613 Z"
+            stroke="url(#bodyStroke)" stroke-width="15"/>
+      <rect x="91" y="365" width="260" height="230" rx="49"
+            stroke="url(#faceStroke)" stroke-width="18"/>
+    </g>
+    <g transform="translate(578 0)">
+      <path d="M94 430 Q98 386 141 382 H301 Q344 386 348 430 L365 613 Q369 650 329 654 H113 Q73 650 77 613 Z"
+            stroke="url(#bodyStroke)" stroke-width="15"/>
+      <rect x="91" y="365" width="260" height="230" rx="49"
+            stroke="url(#faceStroke)" stroke-width="18"/>
+    </g>
+  </g>
+</svg>
