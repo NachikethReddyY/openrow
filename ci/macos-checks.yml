@@ -1,0 +1,20 @@
+name: macOS checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Focused tests
+        run: swift test
+      - name: Release app bundles
+        run: sh scripts/build-app.sh
+      - name: Privacy and interface audit
+        run: sh scripts/audit.sh

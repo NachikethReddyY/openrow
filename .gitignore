@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+artifacts/
+.evidence/
+*.app
+.DS_Store
