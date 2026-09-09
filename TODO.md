@@ -40,3 +40,6 @@
 - [x] Verify the macOS-resolved installed icon and use the supplied app identity in About and Setup.
 - [x] Correct horizontal scrolling and preserve the physical cursor using accessible scroll positions; fail safely where precise scrolling is unavailable.
 - [ ] Resolve the WebKit precise-scroll failure or receive the user’s v1 scope decision before merge.
+
+- [x] Open PR #1; initial implementation push rejected because OAuth lacks workflow scope.
+- [ ] Push the app with the workflow retained as a template and verify the PR contains the intended commit.

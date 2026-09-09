@@ -36,6 +36,8 @@ These tests move the pointer and send global fixture keys. Keep the test session
 
 Current local validation: native click/scroll and discovery tests pass. The WebKit precise-scroll integration test currently fails because the fixture's web regions do not expose writable scrollbars. Browser scrolling remains incomplete and is a merge blocker pending the v1 scope decision.
 
+The GitHub Actions definition is provided as `ci/macos-checks.yml`. Installing it under `.github/workflows/` requires workflow-write authorization, which the current development token does not have. Validation currently runs locally.
+
 ## Local installation and stable permissions
 
 ```sh

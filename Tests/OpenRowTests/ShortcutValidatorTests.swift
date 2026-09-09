@@ -38,4 +38,3 @@ final class ShortcutValidatorTests: XCTestCase {
         XCTAssertThrowsError(try ShortcutValidator.validate(other, otherShortcut: other))
     }
 }
-
