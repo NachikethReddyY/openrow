@@ -108,7 +108,7 @@ struct DisplaySnapshot: Sendable {
                 outline.lineWidth = 2
                 if !isSelected { outline.setLineDash([5, 4], count: 2, phase: 0) }
                 outline.stroke()
-                drawBadge(String(index + 1), at: CGPoint(x: rect.minX + 4, y: rect.maxY - 4), size: 15,
+                drawBadge(String(index + 1), at: CGPoint(x: rect.minX + 3, y: rect.maxY - 3), size: 9,
                     fill: isSelected ? .systemBlue : .windowBackgroundColor, text: isSelected ? .white : .labelColor,
                     dimmed: false, selected: false)
             }
@@ -125,24 +125,24 @@ struct DisplaySnapshot: Sendable {
                            text: NSColor, dimmed: Bool, selected: Bool) {
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: size, weight: .semibold), .foregroundColor: text]
         let measured = (label as NSString).size(withAttributes: attributes)
-        let width = measured.width + 10
-        let height = measured.height + 4
+        let width = measured.width + 4
+        let height = measured.height + 2
         let rect = CGRect(x: min(max(2, point.x), bounds.width - width - 2),
             y: min(max(2, point.y - height), bounds.height - height - 2), width: width, height: height)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current?.cgContext.setAlpha(dimmed ? 0.24 : 1)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2)
         fill.setFill()
         path.fill()
         (selected ? NSColor.systemBlue : NSColor.black).setStroke()
         path.lineWidth = selected ? 2 : 1
         path.stroke()
-        (label as NSString).draw(at: CGPoint(x: rect.minX + 5, y: rect.minY + 2), withAttributes: attributes)
+        (label as NSString).draw(at: CGPoint(x: rect.minX + 2, y: rect.minY + 1), withAttributes: attributes)
         NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawHUD(_ message: String) {
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: NSColor.labelColor]
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.labelColor]
         let width = min(bounds.width - 40, (message as NSString).size(withAttributes: attrs).width + 24)
         let textRect = CGRect(x: (bounds.width - width) / 2 + 12, y: 32, width: width - 24, height: 40)
         let measured = (message as NSString).boundingRect(with: textRect.size, options: .usesLineFragmentOrigin, attributes: attrs)

@@ -4,7 +4,7 @@ enum HintSize: String, Codable, CaseIterable, Sendable {
     case small, medium, large
     var title: String { rawValue.capitalized }
     var points: CGFloat {
-        switch self { case .small: 12; case .medium: 15; case .large: 19 }
+        switch self { case .small: 8; case .medium: 9; case .large: 11 }
     }
 }
 

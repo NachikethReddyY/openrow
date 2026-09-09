@@ -1,8 +1,27 @@
 # OpenRow implementation handoff
 
-Date: 2026-09-09  
-Branch: `t3code/create-optimized-macos-app`  
-Worktree: `/Users/nr/.t3/worktrees/OpenRow/t3code-e6c5531e`
+## Current implementation status — 2026-09-09
+
+This update supersedes the historical foundation notes below. The user authorized checkpoint commits, a real PR, and squash merging only once the app is verified. The user also authorized local signing, both macOS permissions, installation in Applications, and the local Swift/Quartz fixture harness.
+
+- Native menu-bar app, onboarding, all six Settings panes, global input, AX discovery, overlays, preferences, and native/WebKit fixture are implemented.
+- Latest main's supplied app icon is compiled into both bundles and appears in Applications and About. OpenRow is an accessory app; the disposable fixture has the Dock entry.
+- Installed at `/Applications/OpenRow.app` with a stable local certificate. Signature verification and permission persistence across signed updates passed. This is not Developer ID signing or notarization.
+- Fresh bundle staging prevents modification of executable pages mapped by a running app. The old fixture remained running across multiple subsequent rebuilds without another invalid-page crash.
+- User corrections: 9-point default hints (8/9/11 selectable), compact padding, mixed prefix-free single/double/longer codes, actionable text/popup rows included, plain document cells excluded. These are project guidance in SPEC/DESIGN, not global guidance.
+- Native click count, Escape, four scroll directions, dash, region selection, key-up stop, focus and cursor preservation passed integration tests. Further focused regressions cover modifier-only secure input and rapid region changes.
+- Warm AX discovery sample: 30 runs, 93 targets, approximately 43 ms median and 49 ms p95. This excludes overlay paint; it does not establish the full 100-target paint budget.
+- Known unresolved compatibility: precise scrolling now uses accessible scrollbars to preserve the cursor. The WebKit fixture's nested scroll regions do not expose writable scrollbar values. Browser scrolling is incomplete; a user decision about the first-version limitation is pending. Do not squash merge until that is resolved and required checks pass.
+- Local proof is under `.evidence/openrow/`; generated app bundles and signing credentials stay out of git.
+
+Historical foundation handoff follows for context.
+
+
+- Date: 2026-09-09
+- Branch: `t3code/create-optimized-macos-app`
+- Remote branch: `origin/t3code/create-optimized-macos-app`
+- Foundation commit: `4672436c79c68938ef771484bfdb39086b709d82`
+- Worktree: the active OpenRow checkout
 
 ## Requested outcome
 
@@ -12,7 +31,7 @@ Active contract:
 
 > Outcome: a working native OpenRow menu-bar utility | Allowed changes: this worktree | Protected behavior: the supplied plan plus the user's lifecycle, Settings, and icon corrections | Proof: focused tests, release build, and direct macOS UI/behavior inspection | Stop when: the app runs locally, its core click/scroll flows work, the background lifecycle is observed, and focused checks pass.
 
-The user subsequently requested one local commit of this foundation. No push, PR, publishing, Developer ID signing, or notarization was requested. Keep all further work local unless the user explicitly expands authority.
+The foundation was committed as `4672436` (`feat: establish OpenRow macOS foundation`) and pushed to the matching branch on `origin`. No PR, merge, publishing, Developer ID signing, or notarization was requested. Keep all further external actions separately authorized.
 
 ## Source reference
 
@@ -52,14 +71,16 @@ The expected Settings sidebar is General, Shortcuts, Clicking, Scrolling, Ignore
 
 - The repository began with only `README.md` (`# openrow`).
 - Current branch is dedicated to this task: `t3code/create-optimized-macos-app`.
-- The task began at baseline commit `4904355 first commit`; the files described here are included in the branch's local foundation commit.
+- The task began at `4904355 first commit`.
+- The implemented foundation is commit `4672436c79c68938ef771484bfdb39086b709d82` and was pushed to `origin/t3code/create-optimized-macos-app`.
+- At the time of this handoff update, local `HEAD` and the remote-tracking branch both resolved to `4672436`; there was no ahead/behind divergence before this documentation-only edit.
 - Xcode: 26.6 (`17F113`).
 - Swift: 6.3.3, arm64 Apple Silicon.
 - Host: macOS 26.6.2.
 - `xcodegen`, `swiftformat`, `swiftlint`, and `xcbeautify` were not found.
 - A dependency-free Swift Package was chosen so the project builds immediately without installing tooling. A later bundling script still needs to assemble and ad-hoc-sign `OpenRow.app` for local testing.
 
-Before editing, re-run `git status --short` and preserve any later user changes.
+Before editing, re-run `git status --short --branch`. This handoff update itself is intentionally left as a local, uncommitted change unless the user explicitly asks to commit and push it.
 
 ## Skills already applied
 

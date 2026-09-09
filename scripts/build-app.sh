@@ -1,11 +1,15 @@
 #!/bin/sh
 set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-for tool in swift codesign plutil; do
+for tool in swift codesign plutil xcrun; do
     command -v "$tool" >/dev/null || { echo "Missing prerequisite: $tool" >&2; exit 1; }
 done
 swift build -c release
 binary_dir=$(swift build -c release --show-bin-path)
+icon_dir=$(mktemp -d .build/icon-assets.XXXXXX)
+xcrun actool artwork/OpenRow.icon --compile "$icon_dir" --platform macosx \
+    --minimum-deployment-target 26.0 --app-icon OpenRow \
+    --output-partial-info-plist "$icon_dir/partial-info.plist" --output-format human-readable-text
 identity=${OPENROW_SIGNING_IDENTITY:--}
 keychain=${OPENROW_SIGNING_KEYCHAIN:-}
 local_signing="$HOME/.auth/openrow-signing"
@@ -26,6 +30,9 @@ for name in OpenRow OpenRowFixture; do
     mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
     cp "$binary_dir/$name" "$bundle/Contents/MacOS/$name"
     cp Resources/Info.plist "$bundle/Contents/Info.plist"
+    cp "$icon_dir/Assets.car" "$icon_dir/OpenRow.icns" "$bundle/Contents/Resources/"
+    plutil -replace CFBundleIconName -string OpenRow "$bundle/Contents/Info.plist"
+    plutil -replace CFBundleIconFile -string OpenRow "$bundle/Contents/Info.plist"
     if [ "$name" = OpenRowFixture ]; then
         plutil -replace CFBundleIdentifier -string dev.openrow.OpenRowFixture "$bundle/Contents/Info.plist"
         plutil -replace CFBundleExecutable -string OpenRowFixture "$bundle/Contents/Info.plist"

@@ -135,7 +135,7 @@ struct SettingsView: View {
                 Picker("Label size", selection: preference(\.hintSize)) {
                     ForEach(HintSize.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Text("One key for up to 9 controls, two for up to 81, three for up to 729.").foregroundStyle(.secondary)
+                Text("Single, double, and longer hints share the screen. Short hints stay available even with many controls.").foregroundStyle(.secondary)
             }
             Section("Behavior") {
                 Text("Type a complete hint to move the pointer and click once. Escape cancels. Controls that move or disappear are never clicked at their old position.")
@@ -206,7 +206,10 @@ struct SettingsView: View {
     private var about: some View {
         Group {
             Section {
-                Label("OpenRow", systemImage: "cursorarrow.rays").font(.title2.weight(.semibold))
+                HStack {
+                    Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 40, height: 40).accessibilityHidden(true)
+                    Text("OpenRow").font(.title2.weight(.semibold))
+                }
                 LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0")
                 Text("Keyboard control for your Mac.")
             }

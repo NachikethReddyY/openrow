@@ -16,13 +16,4 @@ import CoreGraphics
         return true
     }
 
-    static func scroll(at point: CGPoint, vector: CGVector) {
-        guard !IsSecureEventInputEnabled(), let source = CGEventSource(stateID: .privateState),
-              let event = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-                wheel1: Int32(vector.dy.rounded()), wheel2: Int32(vector.dx.rounded()), wheel3: 0)
-        else { return }
-        event.location = point
-        event.flags = []
-        event.post(tap: .cghidEventTap)
-    }
 }

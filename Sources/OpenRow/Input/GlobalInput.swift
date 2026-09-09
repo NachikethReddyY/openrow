@@ -91,6 +91,10 @@ final class GlobalInput: @unchecked Sendable {
         state.withLock { command == .tapFailed ? $0.failed : $0.epoch == epoch && !$0.failed }
     }
     func heldScrollState() -> (Set<KeyCode>, Bool) { state.withLock { ($0.scrollKeys, $0.dash) } }
+    var currentEpoch: UInt64 { state.withLock { $0.epoch } }
+    func isScrolling(epoch: UInt64) -> Bool {
+        state.withLock { $0.epoch == epoch && $0.enabled && !$0.failed && $0.router.mode == .scroll && !$0.scrollKeys.isEmpty }
+    }
 
     // A file-scope C callback avoids inheriting start()'s MainActor isolation.
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -102,9 +106,10 @@ final class GlobalInput: @unchecked Sendable {
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 return (value.route(.tapDisabled), value.epoch)
             }
-            value.dash = flags.contains(.maskShift)
-            if type == .flagsChanged { return (.passThrough, value.epoch) }
             let modifiers = InputModifiers(flags: flags)
+            if type == .flagsChanged {
+                return (value.route(.modifiersChanged(modifiers), secure: secure), value.epoch)
+            }
             let event: InputEvent = type == .keyUp ? .keyUp(key, modifiers: modifiers) : .keyDown(key, modifiers: modifiers, isRepeat: isRepeat)
             let decision = value.route(event, secure: secure)
             return (decision, value.epoch)

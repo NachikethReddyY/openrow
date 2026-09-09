@@ -117,6 +117,7 @@ enum ScrollDirection: Equatable, Hashable, Sendable {
 enum InputEvent: Equatable, Sendable {
     case keyDown(KeyCode, modifiers: InputModifiers = [], isRepeat: Bool = false)
     case keyUp(KeyCode, modifiers: InputModifiers = [])
+    case modifiersChanged(InputModifiers)
     case tapDisabled
 }
 
@@ -182,7 +183,7 @@ struct InputRouter: Sendable {
             }
             return routeKeyUp(keyCode, modifiers: modifiers)
 
-        case .tapDisabled:
+        case .tapDisabled, .modifiersChanged:
             return .passThrough
         }
     }

@@ -24,6 +24,7 @@ struct FixtureView: View {
                 Text("OpenRow Fixture").font(.title2.weight(.semibold))
                 Spacer()
                 Toggle("Web fixture", isOn: $web).toggleStyle(.switch)
+                    .accessibilityIdentifier("fixture.webToggle")
                 Button("Reset") { clicks = 0; last = "None"; text = ""; hideTarget = false }
             }
             HStack(spacing: 24) {

@@ -6,7 +6,10 @@ struct OnboardingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Label("Set up OpenRow", systemImage: "cursorarrow.rays").font(.title.weight(.semibold))
+                HStack {
+                    Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 48, height: 48).accessibilityHidden(true)
+                    Text("Set up OpenRow").font(.title.weight(.semibold))
+                }
                 Text("Two macOS permissions let OpenRow find controls, recognize your shortcuts, and perform only the action you choose.")
                     .foregroundStyle(.secondary)
                 GroupBox {

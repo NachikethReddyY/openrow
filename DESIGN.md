@@ -21,6 +21,7 @@ Status: accepted from the supplied OpenRow product plan, with two user correctio
 ## Icons
 
 - SF Symbols is the only interface-icon source. Use `Image(systemName:)` or AppKit symbol images with semantic accessibility labels.
+- The user-supplied `artwork/OpenRow.icon` from main owns the macOS application icon. Compile it with `actool`; the menu bar and all interface controls continue to use SF Symbols.
 - Do not use emoji, Unicode stand-ins, third-party icon libraries, traced symbols, or custom-drawn interface icons.
 - Current map: menu/app mark `cursorarrow.rays`; General `gearshape`; Shortcuts `command`; Clicking `cursorarrow.click.2`; Scrolling `arrow.up.and.down.and.arrow.left.and.right`; Ignored Apps `app.badge`; About `info.circle`; permissions `accessibility` and `keyboard`; status `checkmark.circle.fill`, `pause.circle.fill`, or `exclamationmark.triangle.fill`.
 - Symbols inherit surrounding foreground style. Status color always has a symbol and text equivalent.
@@ -50,6 +51,8 @@ Status: accepted from the supplied OpenRow product plan, with two user correctio
 
 - Overlays are nonactivating, click-through, and excluded from window cycling.
 - Click hints are opaque yellow rounded rectangles with black monospaced text, a black edge, and no screen dimming. Matching is reinforced by opacity; an exact match also gains a blue outline.
+- The 2026-09-09 density correction sets hint text to 8/9/11 pt (Small/Medium/Large), default 9 pt, with 2 pt horizontal and 1 pt vertical padding. Region numbers use 9 pt. Preserve this compact scale across rebuilds.
+- Mix single, double, and longer hint codes with no ambiguous prefixes. Discover actionable popup rows; document table cells do not receive hints merely because they are cells.
 - Scroll selection is a 2-point blue inset outline with a numbered badge and a compact instruction HUD. Selection never relies on color alone.
 - Overlay panels reuse one drawing surface per display. Reduce Motion disables transition animation; Reduce Transparency uses opaque surfaces.
 
@@ -67,4 +70,3 @@ Status: accepted from the supplied OpenRow product plan, with two user correctio
 - Overlay mode announcements describe mode and available keys without exposing scanned UI strings.
 - Meaning survives grayscale, increased contrast, reduced transparency, reduced motion, and large text.
 - Every visible element contributes action, state, grouping, or identity. Further visual removal would reduce recognition or recovery.
-

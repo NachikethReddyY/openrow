@@ -2,6 +2,15 @@ import XCTest
 @testable import OpenRow
 
 final class TargetPolicyTests: XCTestCase {
+    func testInteractivePopupRowsAreIncludedButDocumentCellsAreNot() {
+        XCTAssertFalse(TargetPolicy.supportsClick(role: "AXCell", actions: []))
+        XCTAssertFalse(TargetPolicy.supportsClick(role: "AXStaticText", actions: []))
+        XCTAssertTrue(TargetPolicy.supportsClick(role: "AXRow", actions: ["AXPress"]))
+        XCTAssertTrue(TargetPolicy.supportsClick(role: "AXMenuItem", actions: []))
+        XCTAssertTrue(TargetPolicy.supportsClick(role: "AXButton", actions: []))
+        XCTAssertTrue(TargetPolicy.supportsClick(role: "AXCell", actions: ["AXPress"]))
+        XCTAssertTrue(TargetPolicy.supportsClick(role: "AXStaticText", actions: ["AXPress"]), "Chromium exposes model-picker options as actionable text.")
+    }
     let screens = [CGRect(x: 0, y: 0, width: 1440, height: 900)]
 
     func testRejectsUnsafeGeometryAndState() {

@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Observation
+import OSLog
 import ServiceManagement
 
 @MainActor @Observable final class AppModel {
@@ -14,6 +15,7 @@ import ServiceManagement
     var recordingShortcut = false
     private(set) var discovering = false
     @ObservationIgnored private let store: PreferencesStore
+    @ObservationIgnored private let logger = Logger(subsystem: "dev.openrow.OpenRow", category: "Lifecycle")
     @ObservationIgnored private let accessibility = AccessibilityService()
     @ObservationIgnored private let overlay = OverlayController()
     @ObservationIgnored private var input: GlobalInput!
@@ -155,6 +157,7 @@ import ServiceManagement
     }
 
     func activate(_ requested: OpenRowMode) {
+        logger.notice("Mode activation requested")
         if mode == requested { cancel(); return }
         cancel()
         guard canActivate, !IsSecureEventInputEnabled() else {
@@ -255,7 +258,7 @@ import ServiceManagement
             message = "Input stopped safely. Choose Restart Input in General."
             overlay.announce(message)
         case let .appendHint(key):
-            guard mode == .click, !discovering, let length = codes.first?.keys.count, prefix.count < length else { return }
+            guard mode == .click, !discovering else { return }
             let candidate = prefix + [key]
             guard codes.contains(where: { $0.keys.starts(with: candidate) }) else { NSSound.beep(); return }
             prefix = candidate
@@ -314,15 +317,14 @@ import ServiceManagement
         guard targets.indices.contains(selectedRegion), !scrollValidationInFlight else { return }
         let target = targets[selectedRegion]
         let current = generation
+        let epoch = input.currentEpoch
         scrollValidationInFlight = true
         Task { [weak self, accessibility] in
             guard let self else { return }
             defer { self.scrollValidationInFlight = false }
-            let point = await accessibility.revalidate(target, screens: self.overlay.displays.map(\.quartzFrame))
             guard self.generation == current, self.mode == .scroll, self.scrollTimer != nil,
                   self.targets.indices.contains(self.selectedRegion), self.targets[self.selectedRegion].id == target.id,
                   self.contextIsValid(pid: pid) else { return }
-            guard let point else { self.showNotice("That scroll region changed. Activate Scroll Mode again."); return }
             let held = self.input.heldScrollState()
             var vector = CGVector.zero
             for (key, direction) in [(KeyCode.h, ScrollDirection.left), (.j, .down), (.k, .up), (.l, .right)] where held.0.contains(key) {
@@ -331,7 +333,12 @@ import ServiceManagement
                 vector.dx += part.dx
                 vector.dy += part.dy
             }
-            if vector != .zero { PointerActions.scroll(at: point, vector: vector) }
+            if vector != .zero {
+                let input = self.input!
+                let succeeded = await accessibility.scroll(target, vector: vector, screens: self.overlay.displays.map(\.quartzFrame), shouldContinue: { input.isScrolling(epoch: epoch) })
+                guard self.generation == current, self.mode == .scroll, input.isScrolling(epoch: epoch) else { return }
+                if !succeeded { self.showNotice("This region does not expose precise scrolling controls.") }
+            }
         }
     }
 

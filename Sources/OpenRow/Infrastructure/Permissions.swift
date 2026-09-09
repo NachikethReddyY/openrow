@@ -44,7 +44,7 @@ enum PermissionKind {
         case .enabled: "Enabled"
         case .requiresApproval: "Allow OpenRow in Login Items in System Settings."
         case .notRegistered: "Off"
-        case .notFound: "Open the bundled OpenRow app to configure launch at login."
+        case .notFound: "Off"
         @unknown default: "Status unavailable"
         }
     }

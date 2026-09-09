@@ -1,4 +1,5 @@
 import ApplicationServices
+import Carbon
 import Foundation
 import OSLog
 
@@ -30,7 +31,6 @@ actor AccessibilityService {
     }
     private var entries: [Int: Entry] = [:]
     private let logger = Logger(subsystem: "dev.openrow.OpenRow", category: "Discovery")
-    private let clickRoles: Set<String> = ["AXButton", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXLink", "AXTextField", "AXTextArea", "AXComboBox", "AXSlider", "AXIncrementor", "AXDisclosureTriangle", "AXTab", "AXMenuItem", "AXCell"]
     private let scrollRoles: Set<String> = ["AXScrollArea", "AXWebArea"]
 
     func discover(pid: Int32, mode: OpenRowMode, screens: [CGRect]) async throws -> [TargetSnapshot] {
@@ -62,7 +62,7 @@ actor AccessibilityService {
             }
             if let frame {
                 let visible = clip.map { $0.intersection(frame) } ?? frame
-                let supported = mode == .scroll ? scrollRoles.contains(values.role) : clickRoles.contains(values.role)
+                let supported = mode == .scroll ? scrollRoles.contains(values.role) : supportsClick(element, role: values.role)
                 if supported, values.subrole != "AXSecureTextField",
                    TargetPolicy.isEligible(frame: visible, enabled: values.enabled, hidden: values.hidden, screens: screens) {
                     let signature = "\(Int(visible.minX.rounded())):\(Int(visible.minY.rounded())):\(Int(visible.width.rounded())):\(Int(visible.height.rounded()))"
@@ -86,7 +86,7 @@ actor AccessibilityService {
         }
         try Task.checkCancellation()
         // An incomplete tree must never look like a complete set of reachable controls.
-        if cursor < queue.count { throw DiscoveryError.timedOut }
+        if cursor < queue.count || queue.count >= 5000 { throw DiscoveryError.timedOut }
         entries = Dictionary(uniqueKeysWithValues: found.map { ($0.snapshot.id, $0) })
         let ordered = found.map(\.snapshot).sorted { lhs, rhs in
             let leftScreen = screens.firstIndex(where: { $0.intersects(lhs.frame) }) ?? 0
@@ -123,9 +123,65 @@ actor AccessibilityService {
         return nil
     }
 
+    /// Scroll through exposed scrollbar positions so the hardware pointer never changes.
+    func scroll(_ target: TargetSnapshot, vector: CGVector, screens: [CGRect],
+                shouldContinue: @Sendable () -> Bool) -> Bool {
+        guard shouldContinue(), !IsSecureEventInputEnabled(),
+              revalidate(target, screens: screens) != nil, let entry = entries[target.id],
+              let content = contentSize(entry.element), let viewport = attributes(entry.element)?.frame?.size else { return false }
+        for (name, delta, extent, visible) in [
+            (kAXHorizontalScrollBarAttribute, vector.dx, content.width, viewport.width),
+            (kAXVerticalScrollBarAttribute, vector.dy, content.height, viewport.height)
+        ] where delta != 0 {
+            guard shouldContinue(), !IsSecureEventInputEnabled(),
+                  let focused = elementAttribute(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute) else { return false }
+            var focusedPID: pid_t = 0
+            guard AXUIElementGetPid(focused, &focusedPID) == .success, focusedPID == target.pid else { return false }
+            if extent <= visible { continue }
+            guard let bar = elementAttribute(entry.element, name) else { return false }
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(bar, kAXValueAttribute as CFString, &value) == .success,
+                  let current = value as? Double,
+                  let next = ScrollPosition.fraction(current: current, delta: delta, content: extent, viewport: visible) else { return false }
+            if next != current {
+                // Recheck after the value/geometry IPC, immediately before the only mutation.
+                guard let currentBar = elementAttribute(entry.element, name), CFEqual(currentBar, bar),
+                      revalidate(target, screens: screens) != nil,
+                      let currentApp = elementAttribute(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute),
+                      AXUIElementGetPid(currentApp, &focusedPID) == .success, focusedPID == target.pid,
+                      shouldContinue(), !IsSecureEventInputEnabled() else { return false }
+                if AXUIElementSetAttributeValue(bar, kAXValueAttribute as CFString, NSNumber(value: next)) != .success { return false }
+            }
+        }
+        return true
+    }
+
+    private func contentSize(_ element: AXUIElement) -> CGSize? {
+        var raw: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, "AXContentSize" as CFString, &raw) == .success,
+           let raw, CFGetTypeID(raw) == AXValueGetTypeID() {
+            var size = CGSize.zero
+            if AXValueGetValue(raw as! AXValue, .cgSize, &size) { return size }
+        }
+        // AppKit and WebKit also expose content elements with their full, unclipped dimensions.
+        var contents: CFArray?
+        guard AXUIElementCopyAttributeValues(element, kAXContentsAttribute as CFString, 0, 32, &contents) == .success,
+              let elements = contents as? [AXUIElement] else { return nil }
+        let frames = elements.compactMap { attributes($0)?.frame }
+        guard let first = frames.first else { return nil }
+        return frames.dropFirst().reduce(first) { $0.union($1) }.size
+    }
+
     private func isSecure(_ app: AXUIElement) -> Bool {
         guard let focused = elementAttribute(app, kAXFocusedUIElementAttribute) else { return false }
         return attributes(focused)?.subrole == "AXSecureTextField"
+    }
+
+    private func supportsClick(_ element: AXUIElement, role: String) -> Bool {
+        if TargetPolicy.supportsClick(role: role, actions: []) { return true }
+        var actions: CFArray?
+        guard AXUIElementCopyActionNames(element, &actions) == .success else { return false }
+        return TargetPolicy.supportsClick(role: role, actions: actions as? [String] ?? [])
     }
 
     private func elementAttribute(_ element: AXUIElement, _ name: String) -> AXUIElement? {

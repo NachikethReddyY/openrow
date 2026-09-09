@@ -16,8 +16,8 @@ OpenRow is a native, local-only macOS menu-bar utility that lets a user reveal r
 
 1. Hyper-J (`Control-Option-Shift-Command-J`) toggles click mode globally.
 2. OpenRow reads finite, visible, enabled controls from the frontmost app's accessibility tree without changing focus.
-3. Targets are sorted by display, vertical position, then horizontal position and receive one fixed-length base-9 code from physical A/S/D/F/G/H/J/K/L positions.
-4. One key is used for up to 9 targets, two for up to 81, and three for up to 729.
+3. Targets are sorted by display, vertical position, then horizontal position and receive a prefix-free code from physical A/S/D/F/G/H/J/K/L positions.
+4. Mix single, double, and longer codes as needed. Preserve at least four single-key targets on dense screens; remaining codes use up to four keys for 729 targets. A complete code is never a prefix of another, so selection remains immediate and unambiguous.
 5. Labels use the active keyboard layout's characters while matching physical key positions.
 6. Typing filters labels. Backspace removes one key. Escape or Hyper-J cancels immediately.
 7. A completed code is revalidated against the original process, enabled state, frame, and visible displays. A stale target cancels.
@@ -29,7 +29,7 @@ Only activation keys, hint keys, Backspace, and Escape are consumed. Unrelated k
 
 1. Hyper-K toggles scroll mode globally.
 2. OpenRow discovers visible accessibility scroll/web regions, selects the first in deterministic geometry order, and draws a 2-point blue inset outline plus a number badge.
-3. H/J/K/L scroll left/down/up/right at the selected region without moving the pointer. Shift increases speed.
+3. H/J/K/L adjust the region's accessible scrollbar positions left/down/up/right without moving the pointer. Shift increases speed. Precise scrolling requires writable scrollbars and exposed content dimensions; unsupported regions show a clear message and return to idle.
 4. Key-up stops movement immediately. Tab cycles regions; number keys select regions 1–9.
 5. Escape, Hyper-K, frontmost-app change, display change, pause, secure input, or input-tap failure exits.
 

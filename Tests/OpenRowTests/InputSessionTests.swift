@@ -2,6 +2,27 @@ import XCTest
 @testable import OpenRow
 
 final class InputSessionTests: XCTestCase {
+    func testRegionSelectionInvalidatesOldScrollButKeepsTheFollowingKey() {
+        var session = InputSession(preferences: UserPreferences())
+        session.configure(mode: .scroll, enabled: true)
+        _ = session.route(.keyDown(.j))
+        let oldEpoch = session.epoch
+        _ = session.route(.keyDown(.number1))
+        XCTAssertNotEqual(session.epoch, oldEpoch)
+        XCTAssertTrue(session.scrollKeys.isEmpty)
+        _ = session.route(.keyDown(.j))
+        XCTAssertEqual(session.scrollKeys, [.j])
+    }
+    func testSecureInputOnModifierChangeImmediatelyCancelsHeldScroll() {
+        var session = InputSession(preferences: UserPreferences())
+        session.configure(mode: .scroll, enabled: true)
+        _ = session.route(.keyDown(.j))
+        XCTAssertEqual(session.route(.modifiersChanged(.shift), secure: true), RouteDecision(passingThrough: .cancel))
+        XCTAssertEqual(session.router.mode, .idle)
+        XCTAssertTrue(session.scrollKeys.isEmpty)
+        XCTAssertTrue(session.consumed.isEmpty)
+    }
+
     func testFailureCannotBeUndoneByQueuedConfiguration() {
         var session = InputSession(preferences: UserPreferences())
         session.resetFailure()

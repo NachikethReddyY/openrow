@@ -12,21 +12,33 @@ final class HintAssignerTests: XCTestCase {
         XCTAssertEqual(codes.last?.keys, [.l])
     }
 
-    func testUsesTwoFixedKeysStartingAtTenTargets() throws {
+    func testRetainsSingleKeysWhenMoreTargetsNeedLongerCodes() throws {
         let codes = try HintAssigner.codes(forCount: 10)
 
-        XCTAssertTrue(codes.allSatisfy { $0.keys.count == 2 })
-        XCTAssertEqual(codes[0].keys, [.a, .a])
-        XCTAssertEqual(codes[8].keys, [.a, .l])
-        XCTAssertEqual(codes[9].keys, [.s, .a])
+        XCTAssertEqual(codes.filter { $0.keys.count == 1 }.count, 8)
+        XCTAssertEqual(codes.filter { $0.keys.count == 2 }.count, 2)
+        XCTAssertEqual(codes[0].keys, [.a])
     }
 
     func testSupportsMaximumSnapshotWithoutDuplicates() throws {
         let codes = try HintAssigner.codes(forCount: 729)
 
         XCTAssertEqual(codes.count, 729)
-        XCTAssertTrue(codes.allSatisfy { $0.keys.count == 3 })
+        XCTAssertTrue(codes.contains { $0.keys.count == 1 })
+        XCTAssertTrue(codes.allSatisfy { $0.keys.count <= 4 })
         XCTAssertEqual(Set(codes).count, 729)
+    }
+
+    func testMixedLengthsNeverMakeACompleteCodeAPrefixOfAnother() throws {
+        for count in [10, 57, 81, 100, 300, 729] {
+            let codes = try HintAssigner.codes(forCount: count)
+            XCTAssertEqual(codes.count, count)
+            for (index, code) in codes.enumerated() {
+                XCTAssertFalse(codes.enumerated().contains { $0.offset != index && $0.element.keys.starts(with: code.keys) })
+            }
+        }
+        let dense = try HintAssigner.codes(forCount: 100)
+        XCTAssertEqual(Set(dense.map { $0.keys.count }), [1, 2, 3])
     }
 
     func testRejectsInvalidCounts() {
@@ -36,15 +48,13 @@ final class HintAssignerTests: XCTestCase {
     }
 
     func testFilteringDimsNonmatchesAndSelectsCompletedCode() throws {
-        let codes = try HintAssigner.codes(forCount: 10)
+        let codes = [HintCode(keys: [.a]), HintCode(keys: [.s, .a]), HintCode(keys: [.s, .s])]
 
         let afterA = HintFilter.states(for: codes, prefix: [.a])
-        XCTAssertEqual(afterA.filter { $0 == .matching }.count, 9)
-        XCTAssertEqual(afterA.filter { $0 == .dimmed }.count, 1)
+        XCTAssertEqual(afterA, [.selected, .dimmed, .dimmed])
 
-        let afterAA = HintFilter.states(for: codes, prefix: [.a, .a])
-        XCTAssertEqual(afterAA[0], .selected)
-        XCTAssertTrue(afterAA.dropFirst().allSatisfy { $0 == .dimmed })
+        let afterS = HintFilter.states(for: codes, prefix: [.s])
+        XCTAssertEqual(afterS, [.dimmed, .matching, .matching])
+        XCTAssertEqual(HintFilter.states(for: codes, prefix: [.s, .a]), [.dimmed, .selected, .dimmed])
     }
 }
-

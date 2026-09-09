@@ -8,6 +8,12 @@ struct TargetSnapshot: Identifiable, Sendable {
 }
 
 enum TargetPolicy {
+    private static let clickRoles: Set<String> = ["AXButton", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXLink", "AXTextField", "AXTextArea", "AXComboBox", "AXSlider", "AXIncrementor", "AXDisclosureTriangle", "AXTab", "AXMenuItem"]
+
+    static func supportsClick(role: String, actions: [String]) -> Bool {
+        clickRoles.contains(role) || actions.contains("AXPress")
+    }
+
     static func isEligible(frame: CGRect, enabled: Bool, hidden: Bool, screens: [CGRect]) -> Bool {
         enabled && !hidden && [frame.origin.x, frame.origin.y, frame.width, frame.height].allSatisfy(\.isFinite)
             && frame.width >= 2 && frame.height >= 2 && actionPoint(frame: frame, screens: screens) != nil

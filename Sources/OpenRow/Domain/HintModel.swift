@@ -40,18 +40,18 @@ enum HintAssigner {
         }
         guard count > 0 else { return [] }
 
-        let length = count <= 9 ? 1 : count <= 81 ? 2 : 3
         let alphabet = HintKey.allCases
-
-        return (0..<count).map { value in
-            var remainder = value
-            var keys = Array(repeating: alphabet[0], count: length)
-            for position in (0..<length).reversed() {
-                keys[position] = alphabet[remainder % alphabet.count]
-                remainder /= alphabet.count
-            }
-            return HintCode(keys: keys)
+        var leaves = alphabet.prefix(count).map { HintCode(keys: [$0]) }
+        // Keep easy single-key targets. Expand other leaves, never a prefix of an existing leaf.
+        // A dense screen can need four keys in exchange for retaining the short codes.
+        while leaves.count < count {
+            let shortest = leaves.dropFirst(4).map { $0.keys.count }.min()!
+            let index = leaves.lastIndex { $0.keys.count == shortest }!
+            let parent = leaves.remove(at: index)
+            let children = alphabet.prefix(min(alphabet.count, count - leaves.count)).map { HintCode(keys: parent.keys + [$0]) }
+            leaves.insert(contentsOf: children, at: index)
         }
+        return leaves.sorted { $0.keys.count < $1.keys.count }
     }
 }
 
@@ -69,4 +69,3 @@ enum HintFilter {
         }
     }
 }
-
