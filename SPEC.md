@@ -29,7 +29,7 @@ Only activation keys, hint keys, Backspace, and Escape are consumed. Unrelated k
 
 1. Hyper-K toggles scroll mode globally.
 2. OpenRow discovers visible accessibility scroll/web regions, selects the first in deterministic geometry order, and draws a 2-point blue inset outline plus a number badge.
-3. H/J/K/L adjust the region's accessible scrollbar positions left/down/up/right without moving the pointer. Shift increases speed. Precise scrolling requires writable scrollbars and exposed content dimensions; unsupported regions show a clear message and return to idle.
+3. H/J/K/L scroll left/down/up/right without moving the pointer. Shift increases speed. Use accessible scrollbar positions when writable and window-directed pixel events otherwise. Discover nested web overflow regions from accessible child geometry and clip their hints to the viewport. Revalidate both the target and its original focused window before acting; unavailable or stale targets return to idle with a message.
 4. Key-up stops movement immediately. Tab cycles regions; number keys select regions 1–9.
 5. Escape, Hyper-K, frontmost-app change, display change, pause, secure input, or input-tap failure exits.
 

@@ -12,7 +12,7 @@ OpenRow stays in the menu bar without a Dock icon. Settings opens on demand; clo
 
 All configuration is in native Settings: shortcuts, label size, speed, dash multiplier, ignored apps, pause, launch at login, permissions, and privacy details. Unsupported apps may expose fewer targets. OpenRow cancels on app/display changes, secure input, pause, and input failure.
 
-Hints default to compact 9-point labels and mix single, double, and longer codes without ambiguous prefixes. Clickable accessibility actions are recognized even when a popup exposes them as text. Scrolling uses writable accessibility scrollbars and content dimensions to preserve the pointer; regions that omit those controls report that precise scrolling is unavailable.
+Hints default to compact 9-point labels and mix single, double, and longer codes without ambiguous prefixes. Clickable accessibility actions are recognized even when a popup exposes them as text. Scrolling uses accessible positions when available and window-directed pixel events otherwise, preserving the pointer in native and WebKit regions. Nested web regions are detected from overflowing accessible child geometry; pages with incomplete accessibility trees may expose fewer regions.
 
 ## Build and test
 
@@ -34,7 +34,7 @@ OPENROW_NATIVE_TESTS=1 swift test --filter NativeFlowTests
 
 These tests move the pointer and send global fixture keys. Keep the test session in the foreground. They are skipped during ordinary tests and headless CI. Passing unit tests alone does not establish native click/scroll behavior or performance budgets.
 
-Current local validation: native click/scroll and discovery tests pass. The WebKit precise-scroll integration test currently fails because the fixture's web regions do not expose writable scrollbars. Browser scrolling remains incomplete and is a merge blocker pending the v1 scope decision.
+Local integration coverage includes native and WebKit clicks, browser page and nested scrolling, four directions, dash, region selection, key-up/Escape cancellation, cursor preservation, and stale-target rejection when switching between windows of the same app. Set `OPENROW_CAPTURE_EVIDENCE=1` alongside the native-test flag to save fixture screenshots locally. No universal browser coverage or multi-display hardware validation is claimed.
 
 The GitHub Actions definition is provided as `ci/macos-checks.yml`. Installing it under `.github/workflows/` requires workflow-write authorization, which the current development token does not have. Validation currently runs locally.
 
