@@ -81,5 +81,14 @@ final class InputRouterTests: XCTestCase {
             RouteDecision(consuming: .activateScroll)
         )
     }
-}
 
+    func testModifiedNavigationPassesThrough() {
+        var router = InputRouter(clickShortcut: click, scrollShortcut: scroll)
+        for mode in [OpenRowMode.click, .scroll] {
+            router.mode = mode
+            for key in [KeyCode.escape, .delete, .tab, .number1, .j] {
+                XCTAssertEqual(router.route(.keyDown(key, modifiers: .command)), .passThrough)
+            }
+        }
+    }
+}

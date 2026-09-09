@@ -197,6 +197,7 @@ struct InputRouter: Sendable {
             return .passThrough
 
         case .click:
+            guard modifiers.shortcutRelevant.isEmpty else { return .passThrough }
             if keyCode == .escape { return RouteDecision(consuming: .cancel) }
             if keyCode == .delete { return isRepeat ? .consumeOnly : RouteDecision(consuming: .deleteHint) }
             guard let hintKey = HintKey(keyCode: keyCode), modifiers.shortcutRelevant.isEmpty else {
@@ -205,6 +206,7 @@ struct InputRouter: Sendable {
             return isRepeat ? .consumeOnly : RouteDecision(consuming: .appendHint(hintKey))
 
         case .scroll:
+            guard modifiers.shortcutRelevant.subtracting(.shift).isEmpty else { return .passThrough }
             if keyCode == .escape { return RouteDecision(consuming: .cancel) }
             if keyCode == .tab { return isRepeat ? .consumeOnly : RouteDecision(consuming: .cycleRegion) }
             if let index = regionIndex(for: keyCode) {
