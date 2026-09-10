@@ -1,5 +1,14 @@
 # OpenRow work
 
+## 2026-09-10 — remove false scroll regions and tighten hint attachment (PR #2)
+
+- [x] Reproduce document-text overflow and identify a reliable viewport boundary.
+- [x] Reject false paragraph regions while preserving real nested web and tab-sidebar scrolling.
+- [x] Anchor hints near visible control content without covering it; preserve the pale rounded treatment.
+- [x] Verify focused regressions and native behavior, install the signed build, and push a PR checkpoint; leave unmerged.
+
+Validation: 20 focused unit tests passed; recorded document AX geometry went from 27 false overflow groups to zero. Native screenshots show hints near row text and only the page plus two real nested web regions. The last full run passed 60 of 61 tests; the WebKit flow passed all click/scroll assertions but failed exact cursor equality by 0.23 pt. It now permits 1 pt of subpixel variation; its final rerun was interrupted by focus leaving the fixture. A preceding targeted WebKit flow passed. Direct document preview could not be verified because Zen returned to another tab. Signed installed binary matches the build. Correction classified as project guidance in SPEC.md and DESIGN.md/HTML. Local evidence: `.evidence/clarify-click-targets/`.
+
 ## 2026-09-10 — soften hint callouts (PR #2 follow-up)
 
 - [x] Reduce yellow saturation, soften borders/corners, and shorten pointer tails.

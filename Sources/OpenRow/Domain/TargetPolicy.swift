@@ -7,6 +7,7 @@ struct TargetSnapshot: Identifiable, Sendable {
     let frame: CGRect
     var clickPoint: CGPoint? = nil
     var hintSide: HintSide = .above
+    var contentFrame: CGRect? = nil
 }
 
 enum TargetPolicy {

@@ -91,7 +91,7 @@ struct DisplaySnapshot: Sendable {
         case let .message(message): drawHUD(message)
         case let .hints(targets, labels, states, size):
             var occupied: [CGRect] = []
-            let components = targets.map { localRect($0.frame) }
+            let components = targets.map { localRect($0.contentFrame ?? $0.frame) }
             for index in targets.indices {
                 let target = targets[index]
                 guard let point = target.clickPoint ?? TargetPolicy.actionPoint(frame: target.frame, screens: [display.quartzFrame]),

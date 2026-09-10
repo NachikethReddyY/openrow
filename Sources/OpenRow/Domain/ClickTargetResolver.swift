@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Breadth-first AX metadata; parents always precede their children.
 struct ClickTargetNode {
@@ -9,6 +10,20 @@ struct ClickTargetNode {
 }
 
 enum ClickTargetResolver {
+    /// Reuse the discovered tree: no extra AX reads or UI text leaves the service.
+    static func contentFrames(_ nodes: [ClickTargetNode], targets: Set<Int>, frames: [Int: CGRect]) -> [Int: CGRect] {
+        var owners: [Int: Int] = [:]
+        var result: [Int: CGRect] = [:]
+        for node in nodes {
+            let owner = targets.contains(node.id) ? node.id : node.parentID.flatMap { owners[$0] }
+            owners[node.id] = owner
+            guard let owner, owner != node.id, node.role == "AXImage" || node.role == "AXStaticText",
+                  let frame = frames[node.id], !frame.isNull, frame.width >= 2, frame.height >= 2 else { continue }
+            result[owner] = result[owner].map { $0.union(frame) } ?? frame
+        }
+        return result
+    }
+
     static func resolve(_ nodes: [ClickTargetNode]) -> Set<Int> {
         var owners: [Int: Int] = [:]
         var candidates = Set<Int>()

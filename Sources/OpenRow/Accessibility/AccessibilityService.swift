@@ -59,6 +59,7 @@ actor AccessibilityService {
         var frames = Set<String>()
         var found: [Entry] = []
         var clickNodes: [ClickTargetNode] = []
+        var nodeFrames: [Int: CGRect] = [:]
         while cursor < queue.count, cursor < 5000 {
             try Task.checkCancellation()
             guard start.duration(to: .now) < .seconds(1.5) else { throw DiscoveryError.timedOut }
@@ -75,7 +76,10 @@ actor AccessibilityService {
             // outside AXWebArea, without dedicated scrollbar attributes.
             let overflow = (values.role == "AXGroup" || values.role == "AXTabGroup") && frame.map { viewport in
                 ScrollTargetPolicy.isOverflow(role: values.role, insideWeb: web, insideTabGroup: tabGroup, frame: viewport,
-                    children: children.compactMap { attributes($0)?.frame })
+                    children: children.compactMap { child in
+                        guard let values = attributes(child), let frame = values.frame else { return nil }
+                        return ScrollTargetChild(role: values.role, frame: frame)
+                    })
             } == true
             let scrollable = scrollRoles.contains(values.role) || overflow
             var childClip = clip
@@ -98,6 +102,7 @@ actor AccessibilityService {
                 }
             }
             if mode == .click {
+                if let frame { nodeFrames[nodeID] = clip.map { $0.intersection(frame) } ?? frame }
                 clickNodes.append(ClickTargetNode(id: nodeID, parentID: parentID, role: values.role, actionable: actionable))
             }
             // Bound the returned children as well as traversal so one wide node cannot allocate unbounded work.
@@ -111,15 +116,28 @@ actor AccessibilityService {
             let resolved = ClickTargetResolver.resolve(clickNodes)
             found.removeAll { !resolved.contains($0.snapshot.id) }
             if found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
+            let visualFrames = ClickTargetResolver.contentFrames(clickNodes, targets: resolved, frames: nodeFrames)
+            found = found.map { entry in
+                var snapshot = entry.snapshot
+                if let visual = visualFrames[snapshot.id] {
+                    let clipped = visual.intersection(snapshot.frame)
+                    if !clipped.isNull, clipped.width >= 2, clipped.height >= 2 { snapshot.contentFrame = clipped }
+                }
+                return Entry(element: entry.element, originalFrame: entry.originalFrame, snapshot: snapshot,
+                    window: entry.window, windowNumber: entry.windowNumber)
+            }
             let controls = found
-            let componentFrames = controls.map { ScreenGeometry.cocoaRect(fromQuartz: $0.snapshot.frame, primaryScreenMaxY: 0) }
+            let componentFrames = controls.map { ScreenGeometry.cocoaRect(fromQuartz: $0.snapshot.contentFrame ?? $0.snapshot.frame, primaryScreenMaxY: 0) }
             found = controls.compactMap { entry in
                 let frame = entry.snapshot.frame
                 let nested = controls.filter {
                     $0.snapshot.id != entry.snapshot.id && frame.contains($0.snapshot.frame)
                         && !TargetPolicy.isUnchanged(frame, $0.snapshot.frame)
                 }.map(\.snapshot.frame)
-                guard let area = TargetPolicy.actionArea(frame: frame, screens: screens, excluding: nested),
+                let contentArea = entry.snapshot.contentFrame.flatMap {
+                    TargetPolicy.actionArea(frame: $0, screens: screens, excluding: nested)
+                }
+                guard let area = contentArea ?? TargetPolicy.actionArea(frame: frame, screens: screens, excluding: nested),
                       let screen = screens.first(where: { $0.contains(area) }) else { return nil }
                 let anchor = HintLayout.anchor(in: ScreenGeometry.cocoaRect(fromQuartz: area, primaryScreenMaxY: 0),
                     size: CGSize(width: 26, height: 14), bounds: ScreenGeometry.cocoaRect(fromQuartz: screen, primaryScreenMaxY: 0),

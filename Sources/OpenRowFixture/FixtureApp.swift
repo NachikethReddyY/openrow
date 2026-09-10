@@ -117,6 +117,7 @@ private struct WebFixture: NSViewRepresentable {
         <span role="img" aria-label="Row artwork">&#9679;</span><span>Compound row label</span>
         <button id="accessory" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0">Row accessory</button></div>
         <p id="row-count" role="status">Row clicks: 0; accessory clicks: 0</p>
+        <div role="group" aria-label="Document line" style="position:relative;margin:0 24px 12px;height:18px"><span style="position:absolute;left:-24px">&#8226;</span><span>Plain document text with an outside bullet</span></div>
         <div class="regions"><section class="region" aria-label="Web controls"><div class="wide" id="buttons"></div></section>
         <section class="region" aria-label="Nested reference"><div id="reference"></div></section></div>
         <script>let rows=0,accessories=0;const rowCount=()=>document.querySelector('#row-count').textContent=`Row clicks: ${rows}; accessory clicks: ${accessories}`;document.querySelector('#compound').onclick=()=>{rows++;rowCount()};document.querySelector('#accessory').onclick=e=>{e.stopPropagation();accessories++;rowCount()};let n=0;for(let i=1;i<=100;i++){const b=document.createElement('button');b.textContent='Web control '+i;b.onclick=()=>{document.querySelector('#count').textContent='Web clicks: '+(++n)};document.querySelector('#buttons').append(b)}for(let i=1;i<=60;i++){const p=document.createElement('p');p.textContent='Reference row '+i;document.querySelector('#reference').append(p)}

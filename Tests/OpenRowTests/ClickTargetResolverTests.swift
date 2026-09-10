@@ -12,6 +12,17 @@ final class ClickTargetResolverTests: XCTestCase {
         XCTAssertEqual(ClickTargetResolver.resolve(nodes), [0])
     }
 
+    func testVisualContentStaysWithItsActionOwner() {
+        let nodes = [node(0, nil, "AXLink"), node(1, 0, "AXGroup"), node(2, 1, "AXImage"),
+                     node(3, 1, "AXStaticText"), node(4, 0, "AXButton"), node(5, 4, "AXStaticText")]
+        let icon = CGRect(x: 20, y: 30, width: 16, height: 16)
+        let text = CGRect(x: 40, y: 30, width: 100, height: 16)
+        let accessory = CGRect(x: 300, y: 30, width: 80, height: 16)
+        let frames = ClickTargetResolver.contentFrames(nodes, targets: [0, 4], frames: [2: icon, 3: text, 5: accessory])
+        XCTAssertEqual(frames[0], icon.union(text), "The row must anchor near its own visible content.")
+        XCTAssertEqual(frames[4], accessory, "The independent button must keep its own anchor.")
+    }
+
     func testNestedControlsKeepTheirOwnHintsAndOwnTheirLabels() {
         let nodes = [node(0, nil, "AXRow"), node(1, 0, "AXStaticText"),
                      node(2, 0, "AXButton"), node(3, 2, "AXStaticText"),
