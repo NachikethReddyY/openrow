@@ -36,7 +36,7 @@ Status: accepted from the supplied OpenRow product plan, with compact-hint corre
 
 - Use platform semantic backgrounds, labels, separators, tint, and materials so light, dark, contrast, transparency, and future macOS appearances adapt automatically.
 - System accent owns selection, focus, permission actions, and the selected scroll outline.
-- Opaque warm yellow owns click hints only; it never appears in Settings.
+- Opaque pale yellow owns click hints only; it never appears in Settings.
 - Green, amber, and red are status roles and are always paired with an SF Symbol and text.
 - No custom tinted sidebar, gradients, decorative glows, or continuously repainting animation.
 
@@ -50,10 +50,10 @@ Status: accepted from the supplied OpenRow product plan, with compact-hint corre
 ## Overlay language
 
 - Overlays are nonactivating, click-through, and excluded from window cycling.
-- Click hints are opaque yellow rounded rectangles with black monospaced text, a black edge, and no screen dimming. Matching is reinforced by opacity; an exact match also gains a blue outline.
+- Click hints are opaque pale-yellow (#F5E6AB) rounded rectangles with dark monospaced text, a soft 0.6-point edge, and no screen dimming. Matching is reinforced by opacity; an exact match also gains a blue outline.
 - The 2026-09-09 density correction sets hint text to 8/9/11 pt (Small/Medium/Large), default 9 pt, with 2 pt horizontal and 1 pt vertical padding. Region numbers use 9 pt. Preserve this compact scale across rebuilds.
 - Mix single, double, and longer hint codes with no ambiguous prefixes. Discover actionable popup rows; document table cells do not receive hints merely because they are cells.
-- The 2026-09-10 correction adds a compact triangular callout tail (annotation geometry, not an interface icon). Its tip is the exact stored click coordinate. Place the badge above/below/left/right with a short gap, choose the least overlapping on-screen placement, and keep placement stable during filtering. Show one hint for each action owner, with separate hints for independent controls inside a row.
+- The 2026-09-10 correction adds a 3-point callout tail with rounded joins (annotation geometry, not an interface icon), 3.5-point badge corners, and medium-weight text. Its tip is the exact stored click coordinate, chosen just inside a safe control edge so the badge can sit outside the control. Choose above/below/left/right using nearby component bounds and other labels, and keep placement stable during filtering. Show one hint for each action owner, with separate hints for independent controls inside a row.
 - Scroll selection includes browser tab sidebars separately from the main page. It is a 2-point blue inset outline with a numbered badge and a compact instruction HUD. Selection never relies on color alone.
 - Overlay panels reuse one drawing surface per display. Reduce Motion disables transition animation; Reduce Transparency uses opaque surfaces.
 

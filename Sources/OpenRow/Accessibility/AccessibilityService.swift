@@ -112,15 +112,21 @@ actor AccessibilityService {
             found.removeAll { !resolved.contains($0.snapshot.id) }
             if found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
             let controls = found
+            let componentFrames = controls.map { ScreenGeometry.cocoaRect(fromQuartz: $0.snapshot.frame, primaryScreenMaxY: 0) }
             found = controls.compactMap { entry in
                 let frame = entry.snapshot.frame
                 let nested = controls.filter {
                     $0.snapshot.id != entry.snapshot.id && frame.contains($0.snapshot.frame)
                         && !TargetPolicy.isUnchanged(frame, $0.snapshot.frame)
                 }.map(\.snapshot.frame)
-                guard let point = TargetPolicy.actionPoint(frame: frame, screens: screens, excluding: nested) else { return nil }
+                guard let area = TargetPolicy.actionArea(frame: frame, screens: screens, excluding: nested),
+                      let screen = screens.first(where: { $0.contains(area) }) else { return nil }
+                let anchor = HintLayout.anchor(in: ScreenGeometry.cocoaRect(fromQuartz: area, primaryScreenMaxY: 0),
+                    size: CGSize(width: 26, height: 14), bounds: ScreenGeometry.cocoaRect(fromQuartz: screen, primaryScreenMaxY: 0),
+                    components: componentFrames)
                 var snapshot = entry.snapshot
-                snapshot.clickPoint = point
+                snapshot.clickPoint = CGPoint(x: anchor.tip.x, y: -anchor.tip.y)
+                snapshot.hintSide = anchor.side
                 return Entry(element: entry.element, originalFrame: entry.originalFrame, snapshot: snapshot,
                     window: entry.window, windowNumber: entry.windowNumber)
             }

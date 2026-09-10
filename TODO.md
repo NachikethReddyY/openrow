@@ -1,5 +1,14 @@
 # OpenRow work
 
+## 2026-09-10 — soften hint callouts (PR #2 follow-up)
+
+- [x] Reduce yellow saturation, soften borders/corners, and shorten pointer tails.
+- [x] Prefer free space on all four sides, considering component bounds as well as other labels.
+- [x] Verify focused geometry, native rendering, and unchanged click/scroll behavior.
+- [x] Update project design guidance, install the signed build, and push a PR checkpoint; leave unmerged.
+
+Validation: 59 tests passed (51 unit, 8 native); live compound-row screenshot shows pale rounded callouts, short tails, and placement on all four sides. Click points and sidebar regressions passed. Signed build installed. Correction classified as project design guidance, recorded in DESIGN.md/HTML and SPEC.md.
+
 ## 2026-09-10 — clarify click targets
 
 - [x] Confirm repository, current branch, clean worktree, toolchain, and GitHub access.

@@ -6,6 +6,7 @@ struct TargetSnapshot: Identifiable, Sendable {
     let pid: Int32
     let frame: CGRect
     var clickPoint: CGPoint? = nil
+    var hintSide: HintSide = .above
 }
 
 enum TargetPolicy {
@@ -31,6 +32,11 @@ enum TargetPolicy {
     }
 
     static func actionPoint(frame: CGRect, screens: [CGRect], excluding: [CGRect] = []) -> CGPoint? {
+        guard let visible = actionArea(frame: frame, screens: screens, excluding: excluding) else { return nil }
+        return CGPoint(x: visible.midX, y: visible.midY)
+    }
+
+    static func actionArea(frame: CGRect, screens: [CGRect], excluding: [CGRect] = []) -> CGRect? {
         var intersections = screens.map { frame.intersection($0) }.filter { !$0.isNull && $0.width >= 2 && $0.height >= 2 }
         for exclusion in excluding {
             intersections = intersections.flatMap { rect -> [CGRect] in
@@ -44,7 +50,6 @@ enum TargetPolicy {
                 ].filter { $0.width >= 2 && $0.height >= 2 }
             }
         }
-        guard let visible = intersections.max(by: { $0.width * $0.height < $1.width * $1.height }) else { return nil }
-        return CGPoint(x: visible.midX, y: visible.midY)
+        return intersections.max(by: { $0.width * $0.height < $1.width * $1.height })
     }
 }

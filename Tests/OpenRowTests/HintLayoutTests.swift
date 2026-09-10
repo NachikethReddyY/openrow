@@ -16,16 +16,48 @@ final class HintLayoutTests: XCTestCase {
 
     func testCanUseEverySideToAvoidOtherLabels() {
         let point = CGPoint(x: 150, y: 100)
-        var occupied: [CGRect] = []
-        var sides = Set<HintSide>()
-        for _ in 0..<4 {
-            let hint = HintLayout.place(at: point, size: size, bounds: bounds, occupied: occupied)
-            XCTAssertEqual(hint.tip, point)
-            XCTAssertFalse(occupied.contains { $0.intersects(hint.rect) })
-            sides.insert(hint.side)
-            occupied.append(hint.rect)
+        for side in HintSide.allCases {
+            let available = HintLayout.place(at: point, size: size, bounds: bounds, occupied: [], preferredSide: side)
+            let blocked = HintLayout.place(at: point, size: size, bounds: bounds, occupied: [available.rect])
+            XCTAssertEqual(blocked.tip, point)
+            XCTAssertNotEqual(blocked.side, side)
         }
-        XCTAssertEqual(sides, Set(HintSide.allCases))
+    }
+
+    func testShortPointerAndHorizontalSpaceWhenVerticalIsCrowded() {
+        let point = CGPoint(x: 150, y: 100)
+        let components = [CGRect(x: 100, y: 105, width: 100, height: 40),
+                          CGRect(x: 100, y: 55, width: 100, height: 40)]
+        let hint = HintLayout.place(at: point, size: size, bounds: bounds, occupied: [], components: components)
+        XCTAssertTrue(hint.side == .left || hint.side == .right)
+        XCTAssertEqual(abs(hint.base.x - point.x), 3, accuracy: 0.1)
+        XCTAssertEqual(hint.base.y, point.y)
+    }
+
+    func testPlacementAvoidsNeighboringComponentsEvenWithoutLabelCollision() {
+        let point = CGPoint(x: 150, y: 100)
+        let upperControl = CGRect(x: 130, y: 103, width: 40, height: 30)
+        let hint = HintLayout.place(at: point, size: size, bounds: bounds, occupied: [], components: [upperControl])
+        XCTAssertFalse(hint.rect.intersects(upperControl))
+    }
+
+    func testEdgeAnchorUsesSideSpaceAndKeepsTheLabelOutsideTheRow() {
+        let row = CGRect(x: 60, y: 90, width: 180, height: 20)
+        let above = row.offsetBy(dx: 0, dy: 24)
+        let below = row.offsetBy(dx: 0, dy: -24)
+        let anchor = HintLayout.anchor(in: row, size: size, bounds: bounds, components: [row, above, below])
+        XCTAssertTrue(row.contains(anchor.tip))
+        XCTAssertTrue(anchor.side == .left || anchor.side == .right)
+        XCTAssertFalse([row, above, below].contains { $0.intersects(anchor.rect) })
+    }
+
+    func testEdgeAnchorFallsBackToVerticalSpaceAtTheDisplayEdges() {
+        let row = CGRect(x: 0, y: 90, width: 300, height: 20)
+        let anchor = HintLayout.anchor(in: row, size: size, bounds: bounds, components: [row])
+        XCTAssertTrue(anchor.side == .above || anchor.side == .below)
+        XCTAssertTrue(row.contains(anchor.tip))
+        XCTAssertTrue(bounds.contains(anchor.rect))
+        XCTAssertFalse(row.intersects(anchor.rect))
     }
 
     func testEdgesAndCornersKeepTextOnScreenAndTipFixed() {

@@ -91,18 +91,19 @@ struct DisplaySnapshot: Sendable {
         case let .message(message): drawHUD(message)
         case let .hints(targets, labels, states, size):
             var occupied: [CGRect] = []
+            let components = targets.map { localRect($0.frame) }
             for index in targets.indices {
                 let target = targets[index]
                 guard let point = target.clickPoint ?? TargetPolicy.actionPoint(frame: target.frame, screens: [display.quartzFrame]),
                       display.quartzFrame.contains(point) else { continue }
                 let local = ScreenGeometry.localPoint(fromQuartz: point, inCocoaScreenFrame: display.cocoaFrame,
                     primaryScreenMaxY: display.primaryMaxY)
-                let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: size, weight: .semibold), .foregroundColor: NSColor.black]
+                let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: size, weight: .medium), .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 1)]
                 let measured = (labels[index] as NSString).size(withAttributes: attributes)
                 let placement = HintLayout.place(at: local, size: CGSize(width: measured.width + 4, height: measured.height + 2),
-                    bounds: bounds.insetBy(dx: 1, dy: 1), occupied: occupied)
+                    bounds: bounds.insetBy(dx: 1, dy: 1), occupied: occupied, components: components, preferredSide: target.hintSide)
                 occupied.append(placement.rect)
-                let color = NSColor(calibratedRed: 1, green: 0.84, blue: 0.24, alpha: 1)
+                let color = NSColor(calibratedRed: 0.96, green: 0.90, blue: 0.67, alpha: 1)
                 drawCallout(labels[index], placement: placement, attributes: attributes,
                     fill: color, dimmed: states[index] == .dimmed,
                     selected: states[index] == .selected)
@@ -137,8 +138,8 @@ struct DisplaySnapshot: Sendable {
         NSGraphicsContext.current?.cgContext.setAlpha(dimmed ? 0.24 : 1)
         let base = placement.base
         let vertical = placement.side == .above || placement.side == .below
-        let dx: CGFloat = vertical ? 2.5 : 0
-        let dy: CGFloat = vertical ? 0 : 2.5
+        let dx: CGFloat = vertical ? 1.75 : 0
+        let dy: CGFloat = vertical ? 0 : 1.75
         let pointer = NSBezierPath()
         pointer.move(to: CGPoint(x: base.x - dx, y: base.y - dy))
         pointer.line(to: placement.tip)
@@ -146,11 +147,12 @@ struct DisplaySnapshot: Sendable {
         pointer.close()
         fill.setFill()
         pointer.fill()
-        (selected ? NSColor.systemBlue : NSColor.black).setStroke()
-        pointer.lineWidth = selected ? 2 : 1
+        (selected ? NSColor.systemBlue : NSColor(calibratedWhite: 0.25, alpha: 0.55)).setStroke()
+        pointer.lineWidth = selected ? 1.5 : 0.6
+        pointer.lineJoinStyle = .round
         pointer.stroke()
-        let badge = NSBezierPath(roundedRect: placement.rect, xRadius: 2, yRadius: 2)
-        badge.lineWidth = selected ? 2 : 1
+        let badge = NSBezierPath(roundedRect: placement.rect, xRadius: 3.5, yRadius: 3.5)
+        badge.lineWidth = selected ? 1.5 : 0.6
         badge.fill()
         badge.stroke()
         (label as NSString).draw(at: CGPoint(x: placement.rect.minX + 2, y: placement.rect.minY + 1), withAttributes: attributes)
