@@ -1,6 +1,6 @@
 # OpenRow interface design
 
-Status: accepted from the supplied OpenRow product plan, with two user corrections incorporated on 2026-09-09.
+Status: accepted from the supplied OpenRow product plan, with compact-hint corrections on 2026-09-09 and click/scroll target corrections on 2026-09-10.
 
 ## Product frame
 
@@ -53,7 +53,8 @@ Status: accepted from the supplied OpenRow product plan, with two user correctio
 - Click hints are opaque yellow rounded rectangles with black monospaced text, a black edge, and no screen dimming. Matching is reinforced by opacity; an exact match also gains a blue outline.
 - The 2026-09-09 density correction sets hint text to 8/9/11 pt (Small/Medium/Large), default 9 pt, with 2 pt horizontal and 1 pt vertical padding. Region numbers use 9 pt. Preserve this compact scale across rebuilds.
 - Mix single, double, and longer hint codes with no ambiguous prefixes. Discover actionable popup rows; document table cells do not receive hints merely because they are cells.
-- Scroll selection is a 2-point blue inset outline with a numbered badge and a compact instruction HUD. Selection never relies on color alone.
+- The 2026-09-10 correction adds a compact triangular callout tail (annotation geometry, not an interface icon). Its tip is the exact stored click coordinate. Place the badge above/below/left/right with a short gap, choose the least overlapping on-screen placement, and keep placement stable during filtering. Show one hint for each action owner, with separate hints for independent controls inside a row.
+- Scroll selection includes browser tab sidebars separately from the main page. It is a 2-point blue inset outline with a numbered badge and a compact instruction HUD. Selection never relies on color alone.
 - Overlay panels reuse one drawing surface per display. Reduce Motion disables transition animation; Reduce Transparency uses opaque surfaces.
 
 ## Interaction and states

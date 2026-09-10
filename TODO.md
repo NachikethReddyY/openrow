@@ -8,7 +8,7 @@
 - [x] Consolidate click targets by action ownership and commit a verified checkpoint (9 focused tests passed).
 - [x] Draw compact directional callouts anchored to the click point and commit a verified checkpoint (44 unit tests passed; signed release build passed).
 - [x] Discover the browser's scrollable tab sidebar separately from web content, preserve cursor/direction behavior, and commit a verified checkpoint (native tab-sidebar regression and WebKit flow passed).
-- [ ] Verify native/WebKit interactions and inspect the live overlay; obtain focused Luna validation.
+- [x] Verify native/WebKit interactions and inspect the live overlay; obtain focused Luna validation (55 tests passed, 8 native flows; Zen sidebar restored after scrolling, 20 visible tab rows each had one hint).
 - [ ] Synchronize behavior/design documentation, rebase on main, push checkpoints, and open a real PR.
 - [ ] Review latest PR checks/findings and provide a testable build for user testing; leave unmerged.
 

@@ -14,6 +14,12 @@ import XCTest
         }
         guard AXIsProcessTrusted() else { throw XCTSkip("The test host needs Accessibility permission.") }
         let path = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".build/OpenRowFixture.app")
+        // Start each independent flow with a fresh fixture; closed secondary-window
+        // AX handles and previous WebKit state must not leak into the next test.
+        for previous in NSWorkspace.shared.runningApplications where previous.bundleIdentifier == "dev.openrow.OpenRowFixture" {
+            previous.terminate()
+            try await waitUntil { previous.isTerminated }
+        }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         fixture = try await NSWorkspace.shared.openApplication(at: path, configuration: configuration)
