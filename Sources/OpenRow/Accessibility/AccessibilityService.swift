@@ -53,7 +53,7 @@ actor AccessibilityService {
                   let frame = CGRect(dictionaryRepresentation: bounds), let windowBounds else { return false }
             return TargetPolicy.isUnchanged(windowBounds, frame)
         }?[kCGWindowNumber as String] as? Int
-        var queue: [(AXUIElement, CGRect?, Bool, Int?)] = [(window, windowBounds, false, nil)]
+        var queue: [(AXUIElement, CGRect?, Bool, Bool, Int?)] = [(window, windowBounds, false, false, nil)]
         var cursor = 0
         var seen = Set<CFHashCode>()
         var frames = Set<String>()
@@ -62,27 +62,24 @@ actor AccessibilityService {
         while cursor < queue.count, cursor < 5000 {
             try Task.checkCancellation()
             guard start.duration(to: .now) < .seconds(1.5) else { throw DiscoveryError.timedOut }
-            let (element, clip, insideWeb, parentID) = queue[cursor]
+            let (element, clip, insideWeb, insideTabGroup, parentID) = queue[cursor]
             let nodeID = cursor
             cursor += 1
             guard seen.insert(CFHash(element)).inserted else { continue }
             guard let values = attributes(element), !values.hidden, values.enabled else { continue }
             let frame = values.frame
             let web = insideWeb || values.role == "AXWebArea"
+            let tabGroup = insideTabGroup || (!web && values.role == "AXTabGroup")
             let children = children(of: element, limit: max(0, 5000 - queue.count))
-            // WebKit exposes CSS overflow containers as groups, without scrollbar attributes.
-            // Overflowing child geometry identifies nested viewports; ordinary text groups stay out.
-            let overflow = web && values.role == "AXGroup" && frame.map { viewport in
-                children.contains { child in
-                    guard let content = attributes(child)?.frame else { return false }
-                    return content.width > viewport.width + 2 || content.height > viewport.height + 2 ||
-                        content.minX < viewport.minX - 2 || content.maxX > viewport.maxX + 2 ||
-                        content.minY < viewport.minY - 2 || content.maxY > viewport.maxY + 2
-                }
+            // Browser chrome (including Zen's tab sidebar) can expose overflow groups
+            // outside AXWebArea, without dedicated scrollbar attributes.
+            let overflow = (values.role == "AXGroup" || values.role == "AXTabGroup") && frame.map { viewport in
+                ScrollTargetPolicy.isOverflow(role: values.role, insideWeb: web, insideTabGroup: tabGroup, frame: viewport,
+                    children: children.compactMap { attributes($0)?.frame })
             } == true
             let scrollable = scrollRoles.contains(values.role) || overflow
             var childClip = clip
-            if scrollable || (mode == .click && values.role == "AXTabGroup"), let frame {
+            if scrollable || (!web && values.role == "AXTabGroup"), let frame {
                 childClip = clip.map { $0.intersection(frame) } ?? frame
             }
             var actionable = false
@@ -104,7 +101,7 @@ actor AccessibilityService {
                 clickNodes.append(ClickTargetNode(id: nodeID, parentID: parentID, role: values.role, actionable: actionable))
             }
             // Bound the returned children as well as traversal so one wide node cannot allocate unbounded work.
-            queue.append(contentsOf: children.map { ($0, childClip, web, nodeID) })
+            queue.append(contentsOf: children.map { ($0, childClip, web, tabGroup, nodeID) })
             if cursor.isMultiple(of: 24) { await Task.yield() }
         }
         try Task.checkCancellation()
@@ -129,6 +126,20 @@ actor AccessibilityService {
             }
         }
         entries = Dictionary(uniqueKeysWithValues: found.map { ($0.snapshot.id, $0) })
+        if mode == .click {
+            var reachable: [Entry] = []
+            for entry in found {
+                try Task.checkCancellation()
+                guard start.duration(to: .now) < .seconds(1.5) else { throw DiscoveryError.timedOut }
+                // Browser trees can expose hidden, overlapping controls and empty press
+                // wrappers. Keep only targets whose displayed point reaches their owner.
+                if let point = entry.snapshot.clickPoint, validatedHit(entry, at: point, isClick: true) != nil {
+                    reachable.append(entry)
+                }
+            }
+            found = reachable
+            entries = Dictionary(uniqueKeysWithValues: found.map { ($0.snapshot.id, $0) })
+        }
         let ordered = found.map(\.snapshot).sorted { lhs, rhs in
             let leftScreen = screens.firstIndex(where: { $0.intersects(lhs.frame) }) ?? 0
             let rightScreen = screens.firstIndex(where: { $0.intersects(rhs.frame) }) ?? 0
@@ -155,6 +166,10 @@ actor AccessibilityService {
               target.frame.contains(point), screens.contains(where: { $0.contains(point) })
         else { return nil }
 
+        return validatedHit(entry, at: point, isClick: target.clickPoint != nil)
+    }
+
+    private func validatedHit(_ entry: Entry, at point: CGPoint, isClick: Bool) -> CGPoint? {
         // Reject an occluding window or another control that has replaced this target.
         var hit: AXUIElement?
         guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hit) == .success,
@@ -163,7 +178,7 @@ actor AccessibilityService {
         for _ in 0..<12 {
             if CFEqual(candidate, entry.element) { return point }
             // A row's action must not turn into a newly moved nested button's action.
-            if target.clickPoint != nil, let hitValues = attributes(candidate),
+            if isClick, let hitValues = attributes(candidate),
                TargetPolicy.isDistinctControl(role: hitValues.role), supportsClick(candidate, role: hitValues.role) {
                 return nil
             }

@@ -7,7 +7,7 @@
 - [x] Add regressions for shared row actions, distinct nested controls, and exact pointer geometry.
 - [x] Consolidate click targets by action ownership and commit a verified checkpoint (9 focused tests passed).
 - [x] Draw compact directional callouts anchored to the click point and commit a verified checkpoint (44 unit tests passed; signed release build passed).
-- [ ] Discover the browser's scrollable tab sidebar separately from web content, preserve cursor/direction behavior, and commit a verified checkpoint.
+- [x] Discover the browser's scrollable tab sidebar separately from web content, preserve cursor/direction behavior, and commit a verified checkpoint (native tab-sidebar regression and WebKit flow passed).
 - [ ] Verify native/WebKit interactions and inspect the live overlay; obtain focused Luna validation.
 - [ ] Synchronize behavior/design documentation, rebase on main, push checkpoints, and open a real PR.
 - [ ] Review latest PR checks/findings and provide a testable build for user testing; leave unmerged.
