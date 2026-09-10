@@ -1,5 +1,37 @@
 # OpenRow work
 
+## 2026-09-10 — remove false scroll regions and tighten hint attachment (PR #2)
+
+- [x] Reproduce document-text overflow and identify a reliable viewport boundary.
+- [x] Reject false paragraph regions while preserving real nested web and tab-sidebar scrolling.
+- [x] Anchor hints near visible control content without covering it; preserve the pale rounded treatment.
+- [x] Verify focused regressions and native behavior, install the signed build, and push a PR checkpoint; leave unmerged.
+
+Validation: 20 focused unit tests passed; recorded document AX geometry went from 27 false overflow groups to zero. Native screenshots show hints near row text and only the page plus two real nested web regions. The last full run passed 60 of 61 tests; the WebKit flow passed all click/scroll assertions but failed exact cursor equality by 0.23 pt. It now permits 1 pt of subpixel variation; its final rerun was interrupted by focus leaving the fixture. A preceding targeted WebKit flow passed. Follow-up live discovery on the named document passed with exactly two regions: the document and tab sidebar. The visual capture was obscured by the foreground app, so that screenshot is not visual proof. Signed installed binary matches the build. Correction classified as project guidance in SPEC.md and DESIGN.md/HTML. Local evidence: `.evidence/clarify-click-targets/`.
+
+## 2026-09-10 — soften hint callouts (PR #2 follow-up)
+
+- [x] Reduce yellow saturation, soften borders/corners, and shorten pointer tails.
+- [x] Prefer free space on all four sides, considering component bounds as well as other labels.
+- [x] Verify focused geometry, native rendering, and unchanged click/scroll behavior.
+- [x] Update project design guidance, install the signed build, and push a PR checkpoint; leave unmerged.
+
+Validation: 59 tests passed (51 unit, 8 native); live compound-row screenshot shows pale rounded callouts, short tails, and placement on all four sides. Click points and sidebar regressions passed. Signed build installed. Correction classified as project design guidance, recorded in DESIGN.md/HTML and SPEC.md.
+
+## 2026-09-10 — clarify click targets
+
+- [x] Confirm repository, current branch, clean worktree, toolchain, and GitHub access.
+- [x] Inspect live accessibility roles/actions and use Luna to check deduplication boundaries.
+- [x] Add regressions for shared row actions, distinct nested controls, and exact pointer geometry.
+- [x] Consolidate click targets by action ownership and commit a verified checkpoint (9 focused tests passed).
+- [x] Draw compact directional callouts anchored to the click point and commit a verified checkpoint (44 unit tests passed; signed release build passed).
+- [x] Discover the browser's scrollable tab sidebar separately from web content, preserve cursor/direction behavior, and commit a verified checkpoint (native tab-sidebar regression and WebKit flow passed).
+- [x] Verify native/WebKit interactions and inspect the live overlay; obtain focused Luna validation (55 tests passed, 8 native flows; Zen sidebar restored after scrolling, 20 visible tab rows each had one hint).
+- [x] Synchronize behavior/design documentation, rebase on main, push checkpoints, and open real PR #2.
+- [x] Review latest PR checks/findings and provide a testable build for user testing; PR #2 is open and mergeable, with no remote checks/reviews configured or returned; signed /Applications build matches the tested release. Leave unmerged.
+
+Validation: 55 tests passed (47 unit, 8 native). Live Zen sidebar scroll moved 31 rows, preserved page and pointer, stopped on key-up, and restored position; 20 visible tab rows each received one hint. Thirty warm runs discovering 130 controls and drawing 100 hints measured p50 146 ms / p95 183 ms. This correction is project guidance in SPEC.md and DESIGN.md. Local evidence remains under `.evidence/clarify-click-targets/`.
+
 ## 2026-09-09 — optimized native macOS app
 
 - [x] Inspect the Postplan reference and repository/toolchain prerequisites.

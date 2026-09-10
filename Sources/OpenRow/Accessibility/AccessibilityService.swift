@@ -53,58 +53,117 @@ actor AccessibilityService {
                   let frame = CGRect(dictionaryRepresentation: bounds), let windowBounds else { return false }
             return TargetPolicy.isUnchanged(windowBounds, frame)
         }?[kCGWindowNumber as String] as? Int
-        var queue: [(AXUIElement, CGRect?, Bool)] = [(window, windowBounds, false)]
+        var queue: [(AXUIElement, CGRect?, Bool, Bool, Int?)] = [(window, windowBounds, false, false, nil)]
         var cursor = 0
         var seen = Set<CFHashCode>()
         var frames = Set<String>()
         var found: [Entry] = []
+        var clickNodes: [ClickTargetNode] = []
+        var nodeFrames: [Int: CGRect] = [:]
         while cursor < queue.count, cursor < 5000 {
             try Task.checkCancellation()
             guard start.duration(to: .now) < .seconds(1.5) else { throw DiscoveryError.timedOut }
-            let (element, clip, insideWeb) = queue[cursor]
+            let (element, clip, insideWeb, insideTabGroup, parentID) = queue[cursor]
+            let nodeID = cursor
             cursor += 1
             guard seen.insert(CFHash(element)).inserted else { continue }
             guard let values = attributes(element), !values.hidden, values.enabled else { continue }
             let frame = values.frame
             let web = insideWeb || values.role == "AXWebArea"
+            let tabGroup = insideTabGroup || (!web && values.role == "AXTabGroup")
             let children = children(of: element, limit: max(0, 5000 - queue.count))
-            // WebKit exposes CSS overflow containers as groups, without scrollbar attributes.
-            // Overflowing child geometry identifies nested viewports; ordinary text groups stay out.
-            let overflow = web && values.role == "AXGroup" && frame.map { viewport in
-                children.contains { child in
-                    guard let content = attributes(child)?.frame else { return false }
-                    return content.width > viewport.width + 2 || content.height > viewport.height + 2 ||
-                        content.minX < viewport.minX - 2 || content.maxX > viewport.maxX + 2 ||
-                        content.minY < viewport.minY - 2 || content.maxY > viewport.maxY + 2
-                }
+            // Browser chrome (including Zen's tab sidebar) can expose overflow groups
+            // outside AXWebArea, without dedicated scrollbar attributes.
+            let overflow = (values.role == "AXGroup" || values.role == "AXTabGroup") && frame.map { viewport in
+                ScrollTargetPolicy.isOverflow(role: values.role, insideWeb: web, insideTabGroup: tabGroup, frame: viewport,
+                    children: children.compactMap { child in
+                        guard let values = attributes(child), let frame = values.frame else { return nil }
+                        return ScrollTargetChild(role: values.role, frame: frame)
+                    })
             } == true
             let scrollable = scrollRoles.contains(values.role) || overflow
             var childClip = clip
-            if scrollable, let frame {
+            if scrollable || (!web && values.role == "AXTabGroup"), let frame {
                 childClip = clip.map { $0.intersection(frame) } ?? frame
             }
+            var actionable = false
             if let frame {
                 let visible = clip.map { $0.intersection(frame) } ?? frame
                 let supported = mode == .scroll ? scrollable : supportsClick(element, role: values.role)
                 if supported, values.subrole != "AXSecureTextField",
                    TargetPolicy.isEligible(frame: visible, enabled: values.enabled, hidden: values.hidden, screens: screens) {
                     let signature = "\(Int(visible.minX.rounded())):\(Int(visible.minY.rounded())):\(Int(visible.width.rounded())):\(Int(visible.height.rounded()))"
-                    if frames.insert(signature).inserted {
-                        let snapshot = TargetSnapshot(id: found.count, pid: pid, frame: visible)
+                    if mode == .click || frames.insert(signature).inserted {
+                        actionable = true
+                        let snapshot = TargetSnapshot(id: nodeID, pid: pid, frame: visible)
                         found.append(Entry(element: element, originalFrame: frame, snapshot: snapshot,
                                            window: window, windowNumber: windowNumber))
-                        if mode == .click, found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
                     }
                 }
             }
+            if mode == .click {
+                if let frame { nodeFrames[nodeID] = clip.map { $0.intersection(frame) } ?? frame }
+                clickNodes.append(ClickTargetNode(id: nodeID, parentID: parentID, role: values.role, actionable: actionable))
+            }
             // Bound the returned children as well as traversal so one wide node cannot allocate unbounded work.
-            queue.append(contentsOf: children.map { ($0, childClip, web) })
+            queue.append(contentsOf: children.map { ($0, childClip, web, tabGroup, nodeID) })
             if cursor.isMultiple(of: 24) { await Task.yield() }
         }
         try Task.checkCancellation()
         // An incomplete tree must never look like a complete set of reachable controls.
         if cursor < queue.count || queue.count >= 5000 { throw DiscoveryError.timedOut }
+        if mode == .click {
+            let resolved = ClickTargetResolver.resolve(clickNodes)
+            found.removeAll { !resolved.contains($0.snapshot.id) }
+            if found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
+            let visualFrames = ClickTargetResolver.contentFrames(clickNodes, targets: resolved, frames: nodeFrames)
+            found = found.map { entry in
+                var snapshot = entry.snapshot
+                if let visual = visualFrames[snapshot.id] {
+                    let clipped = visual.intersection(snapshot.frame)
+                    if !clipped.isNull, clipped.width >= 2, clipped.height >= 2 { snapshot.contentFrame = clipped }
+                }
+                return Entry(element: entry.element, originalFrame: entry.originalFrame, snapshot: snapshot,
+                    window: entry.window, windowNumber: entry.windowNumber)
+            }
+            let controls = found
+            let componentFrames = controls.map { ScreenGeometry.cocoaRect(fromQuartz: $0.snapshot.contentFrame ?? $0.snapshot.frame, primaryScreenMaxY: 0) }
+            found = controls.compactMap { entry in
+                let frame = entry.snapshot.frame
+                let nested = controls.filter {
+                    $0.snapshot.id != entry.snapshot.id && frame.contains($0.snapshot.frame)
+                        && !TargetPolicy.isUnchanged(frame, $0.snapshot.frame)
+                }.map(\.snapshot.frame)
+                let contentArea = entry.snapshot.contentFrame.flatMap {
+                    TargetPolicy.actionArea(frame: $0, screens: screens, excluding: nested)
+                }
+                guard let area = contentArea ?? TargetPolicy.actionArea(frame: frame, screens: screens, excluding: nested),
+                      let screen = screens.first(where: { $0.contains(area) }) else { return nil }
+                let anchor = HintLayout.anchor(in: ScreenGeometry.cocoaRect(fromQuartz: area, primaryScreenMaxY: 0),
+                    size: CGSize(width: 26, height: 14), bounds: ScreenGeometry.cocoaRect(fromQuartz: screen, primaryScreenMaxY: 0),
+                    components: componentFrames)
+                var snapshot = entry.snapshot
+                snapshot.clickPoint = CGPoint(x: anchor.tip.x, y: -anchor.tip.y)
+                snapshot.hintSide = anchor.side
+                return Entry(element: entry.element, originalFrame: entry.originalFrame, snapshot: snapshot,
+                    window: entry.window, windowNumber: entry.windowNumber)
+            }
+        }
         entries = Dictionary(uniqueKeysWithValues: found.map { ($0.snapshot.id, $0) })
+        if mode == .click {
+            var reachable: [Entry] = []
+            for entry in found {
+                try Task.checkCancellation()
+                guard start.duration(to: .now) < .seconds(1.5) else { throw DiscoveryError.timedOut }
+                // Browser trees can expose hidden, overlapping controls and empty press
+                // wrappers. Keep only targets whose displayed point reaches their owner.
+                if let point = entry.snapshot.clickPoint, validatedHit(entry, at: point, isClick: true) != nil {
+                    reachable.append(entry)
+                }
+            }
+            found = reachable
+            entries = Dictionary(uniqueKeysWithValues: found.map { ($0.snapshot.id, $0) })
+        }
         let ordered = found.map(\.snapshot).sorted { lhs, rhs in
             let leftScreen = screens.firstIndex(where: { $0.intersects(lhs.frame) }) ?? 0
             let rightScreen = screens.firstIndex(where: { $0.intersects(rhs.frame) }) ?? 0
@@ -127,9 +186,14 @@ actor AccessibilityService {
               current.subrole != "AXSecureTextField",
               TargetPolicy.isUnchanged(entry.originalFrame, frame),
               TargetPolicy.isEligible(frame: frame, enabled: current.enabled, hidden: current.hidden, screens: screens),
-              let point = TargetPolicy.actionPoint(frame: target.frame, screens: screens)
+              let point = target.clickPoint ?? TargetPolicy.actionPoint(frame: target.frame, screens: screens),
+              target.frame.contains(point), screens.contains(where: { $0.contains(point) })
         else { return nil }
 
+        return validatedHit(entry, at: point, isClick: target.clickPoint != nil)
+    }
+
+    private func validatedHit(_ entry: Entry, at point: CGPoint, isClick: Bool) -> CGPoint? {
         // Reject an occluding window or another control that has replaced this target.
         var hit: AXUIElement?
         guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hit) == .success,
@@ -137,6 +201,11 @@ actor AccessibilityService {
         let initialHit = candidate
         for _ in 0..<12 {
             if CFEqual(candidate, entry.element) { return point }
+            // A row's action must not turn into a newly moved nested button's action.
+            if isClick, let hitValues = attributes(candidate),
+               TargetPolicy.isDistinctControl(role: hitValues.role), supportsClick(candidate, role: hitValues.role) {
+                return nil
+            }
             guard let parent = elementAttribute(candidate, kAXParentAttribute) else { break }
             candidate = parent
         }
