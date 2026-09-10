@@ -90,12 +90,21 @@ struct DisplaySnapshot: Sendable {
         case .none: break
         case let .message(message): drawHUD(message)
         case let .hints(targets, labels, states, size):
-            for index in targets.indices where display.quartzFrame.intersects(targets[index].frame) {
+            var occupied: [CGRect] = []
+            for index in targets.indices {
                 let target = targets[index]
-                let local = localRect(target.frame)
+                guard let point = target.clickPoint ?? TargetPolicy.actionPoint(frame: target.frame, screens: [display.quartzFrame]),
+                      display.quartzFrame.contains(point) else { continue }
+                let local = ScreenGeometry.localPoint(fromQuartz: point, inCocoaScreenFrame: display.cocoaFrame,
+                    primaryScreenMaxY: display.primaryMaxY)
+                let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: size, weight: .semibold), .foregroundColor: NSColor.black]
+                let measured = (labels[index] as NSString).size(withAttributes: attributes)
+                let placement = HintLayout.place(at: local, size: CGSize(width: measured.width + 4, height: measured.height + 2),
+                    bounds: bounds.insetBy(dx: 1, dy: 1), occupied: occupied)
+                occupied.append(placement.rect)
                 let color = NSColor(calibratedRed: 1, green: 0.84, blue: 0.24, alpha: 1)
-                drawBadge(labels[index], at: CGPoint(x: local.minX, y: local.maxY), size: size,
-                    fill: color, text: .black, dimmed: states[index] == .dimmed,
+                drawCallout(labels[index], placement: placement, attributes: attributes,
+                    fill: color, dimmed: states[index] == .dimmed,
                     selected: states[index] == .selected)
             }
         case let .regions(targets, selected):
@@ -119,6 +128,32 @@ struct DisplaySnapshot: Sendable {
     private func localRect(_ rect: CGRect) -> CGRect {
         ScreenGeometry.cocoaRect(fromQuartz: rect, primaryScreenMaxY: display.primaryMaxY)
             .offsetBy(dx: -display.cocoaFrame.minX, dy: -display.cocoaFrame.minY)
+    }
+
+    private func drawCallout(_ label: String, placement: HintPlacement, attributes: [NSAttributedString.Key: Any],
+                             fill: NSColor, dimmed: Bool, selected: Bool) {
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current?.cgContext.setAlpha(dimmed ? 0.24 : 1)
+        let base = placement.base
+        let vertical = placement.side == .above || placement.side == .below
+        let dx: CGFloat = vertical ? 2.5 : 0
+        let dy: CGFloat = vertical ? 0 : 2.5
+        let pointer = NSBezierPath()
+        pointer.move(to: CGPoint(x: base.x - dx, y: base.y - dy))
+        pointer.line(to: placement.tip)
+        pointer.line(to: CGPoint(x: base.x + dx, y: base.y + dy))
+        pointer.close()
+        fill.setFill()
+        pointer.fill()
+        (selected ? NSColor.systemBlue : NSColor.black).setStroke()
+        pointer.lineWidth = selected ? 2 : 1
+        pointer.stroke()
+        let badge = NSBezierPath(roundedRect: placement.rect, xRadius: 2, yRadius: 2)
+        badge.lineWidth = selected ? 2 : 1
+        badge.fill()
+        badge.stroke()
+        (label as NSString).draw(at: CGPoint(x: placement.rect.minX + 2, y: placement.rect.minY + 1), withAttributes: attributes)
     }
 
     private func drawBadge(_ label: String, at point: CGPoint, size: CGFloat, fill: NSColor,

@@ -114,6 +114,19 @@ actor AccessibilityService {
             let resolved = ClickTargetResolver.resolve(clickNodes)
             found.removeAll { !resolved.contains($0.snapshot.id) }
             if found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
+            let controls = found
+            found = controls.compactMap { entry in
+                let frame = entry.snapshot.frame
+                let nested = controls.filter {
+                    $0.snapshot.id != entry.snapshot.id && frame.contains($0.snapshot.frame)
+                        && !TargetPolicy.isUnchanged(frame, $0.snapshot.frame)
+                }.map(\.snapshot.frame)
+                guard let point = TargetPolicy.actionPoint(frame: frame, screens: screens, excluding: nested) else { return nil }
+                var snapshot = entry.snapshot
+                snapshot.clickPoint = point
+                return Entry(element: entry.element, originalFrame: entry.originalFrame, snapshot: snapshot,
+                    window: entry.window, windowNumber: entry.windowNumber)
+            }
         }
         entries = Dictionary(uniqueKeysWithValues: found.map { ($0.snapshot.id, $0) })
         let ordered = found.map(\.snapshot).sorted { lhs, rhs in
@@ -138,7 +151,8 @@ actor AccessibilityService {
               current.subrole != "AXSecureTextField",
               TargetPolicy.isUnchanged(entry.originalFrame, frame),
               TargetPolicy.isEligible(frame: frame, enabled: current.enabled, hidden: current.hidden, screens: screens),
-              let point = TargetPolicy.actionPoint(frame: target.frame, screens: screens)
+              let point = target.clickPoint ?? TargetPolicy.actionPoint(frame: target.frame, screens: screens),
+              target.frame.contains(point), screens.contains(where: { $0.contains(point) })
         else { return nil }
 
         // Reject an occluding window or another control that has replaced this target.
@@ -148,6 +162,11 @@ actor AccessibilityService {
         let initialHit = candidate
         for _ in 0..<12 {
             if CFEqual(candidate, entry.element) { return point }
+            // A row's action must not turn into a newly moved nested button's action.
+            if target.clickPoint != nil, let hitValues = attributes(candidate),
+               TargetPolicy.isDistinctControl(role: hitValues.role), supportsClick(candidate, role: hitValues.role) {
+                return nil
+            }
             guard let parent = elementAttribute(candidate, kAXParentAttribute) else { break }
             candidate = parent
         }
