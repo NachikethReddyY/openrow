@@ -9,8 +9,10 @@
 - [x] Draw compact directional callouts anchored to the click point and commit a verified checkpoint (44 unit tests passed; signed release build passed).
 - [x] Discover the browser's scrollable tab sidebar separately from web content, preserve cursor/direction behavior, and commit a verified checkpoint (native tab-sidebar regression and WebKit flow passed).
 - [x] Verify native/WebKit interactions and inspect the live overlay; obtain focused Luna validation (55 tests passed, 8 native flows; Zen sidebar restored after scrolling, 20 visible tab rows each had one hint).
-- [ ] Synchronize behavior/design documentation, rebase on main, push checkpoints, and open a real PR.
-- [ ] Review latest PR checks/findings and provide a testable build for user testing; leave unmerged.
+- [x] Synchronize behavior/design documentation, rebase on main, push checkpoints, and open real PR #2.
+- [x] Review latest PR checks/findings and provide a testable build for user testing; PR #2 is open and mergeable, with no remote checks/reviews configured or returned; signed /Applications build matches the tested release. Leave unmerged.
+
+Validation: 55 tests passed (47 unit, 8 native). Live Zen sidebar scroll moved 31 rows, preserved page and pointer, stopped on key-up, and restored position; 20 visible tab rows each received one hint. Thirty warm runs discovering 130 controls and drawing 100 hints measured p50 146 ms / p95 183 ms. This correction is project guidance in SPEC.md and DESIGN.md. Local evidence remains under `.evidence/clarify-click-targets/`.
 
 ## 2026-09-09 — optimized native macOS app
 
