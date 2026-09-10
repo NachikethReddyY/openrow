@@ -1,5 +1,17 @@
 # OpenRow work
 
+## 2026-09-10 — clarify click targets
+
+- [x] Confirm repository, current branch, clean worktree, toolchain, and GitHub access.
+- [x] Inspect live accessibility roles/actions and use Luna to check deduplication boundaries.
+- [ ] Add regressions for shared row actions, distinct nested controls, and exact pointer geometry.
+- [x] Consolidate click targets by action ownership and commit a verified checkpoint (9 focused tests passed).
+- [ ] Draw compact directional callouts anchored to the click point and commit a verified checkpoint.
+- [ ] Discover the browser's scrollable tab sidebar separately from web content, preserve cursor/direction behavior, and commit a verified checkpoint.
+- [ ] Verify native/WebKit interactions and inspect the live overlay; obtain focused Luna validation.
+- [ ] Synchronize behavior/design documentation, rebase on main, push checkpoints, and open a real PR.
+- [ ] Review latest PR checks/findings and provide a testable build for user testing; leave unmerged.
+
 ## 2026-09-09 — optimized native macOS app
 
 - [x] Inspect the Postplan reference and repository/toolchain prerequisites.

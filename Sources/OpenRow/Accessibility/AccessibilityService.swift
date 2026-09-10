@@ -53,15 +53,17 @@ actor AccessibilityService {
                   let frame = CGRect(dictionaryRepresentation: bounds), let windowBounds else { return false }
             return TargetPolicy.isUnchanged(windowBounds, frame)
         }?[kCGWindowNumber as String] as? Int
-        var queue: [(AXUIElement, CGRect?, Bool)] = [(window, windowBounds, false)]
+        var queue: [(AXUIElement, CGRect?, Bool, Int?)] = [(window, windowBounds, false, nil)]
         var cursor = 0
         var seen = Set<CFHashCode>()
         var frames = Set<String>()
         var found: [Entry] = []
+        var clickNodes: [ClickTargetNode] = []
         while cursor < queue.count, cursor < 5000 {
             try Task.checkCancellation()
             guard start.duration(to: .now) < .seconds(1.5) else { throw DiscoveryError.timedOut }
-            let (element, clip, insideWeb) = queue[cursor]
+            let (element, clip, insideWeb, parentID) = queue[cursor]
+            let nodeID = cursor
             cursor += 1
             guard seen.insert(CFHash(element)).inserted else { continue }
             guard let values = attributes(element), !values.hidden, values.enabled else { continue }
@@ -80,30 +82,39 @@ actor AccessibilityService {
             } == true
             let scrollable = scrollRoles.contains(values.role) || overflow
             var childClip = clip
-            if scrollable, let frame {
+            if scrollable || (mode == .click && values.role == "AXTabGroup"), let frame {
                 childClip = clip.map { $0.intersection(frame) } ?? frame
             }
+            var actionable = false
             if let frame {
                 let visible = clip.map { $0.intersection(frame) } ?? frame
                 let supported = mode == .scroll ? scrollable : supportsClick(element, role: values.role)
                 if supported, values.subrole != "AXSecureTextField",
                    TargetPolicy.isEligible(frame: visible, enabled: values.enabled, hidden: values.hidden, screens: screens) {
                     let signature = "\(Int(visible.minX.rounded())):\(Int(visible.minY.rounded())):\(Int(visible.width.rounded())):\(Int(visible.height.rounded()))"
-                    if frames.insert(signature).inserted {
-                        let snapshot = TargetSnapshot(id: found.count, pid: pid, frame: visible)
+                    if mode == .click || frames.insert(signature).inserted {
+                        actionable = true
+                        let snapshot = TargetSnapshot(id: nodeID, pid: pid, frame: visible)
                         found.append(Entry(element: element, originalFrame: frame, snapshot: snapshot,
                                            window: window, windowNumber: windowNumber))
-                        if mode == .click, found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
                     }
                 }
             }
+            if mode == .click {
+                clickNodes.append(ClickTargetNode(id: nodeID, parentID: parentID, role: values.role, actionable: actionable))
+            }
             // Bound the returned children as well as traversal so one wide node cannot allocate unbounded work.
-            queue.append(contentsOf: children.map { ($0, childClip, web) })
+            queue.append(contentsOf: children.map { ($0, childClip, web, nodeID) })
             if cursor.isMultiple(of: 24) { await Task.yield() }
         }
         try Task.checkCancellation()
         // An incomplete tree must never look like a complete set of reachable controls.
         if cursor < queue.count || queue.count >= 5000 { throw DiscoveryError.timedOut }
+        if mode == .click {
+            let resolved = ClickTargetResolver.resolve(clickNodes)
+            found.removeAll { !resolved.contains($0.snapshot.id) }
+            if found.count > HintAssigner.maximumCount { throw DiscoveryError.tooManyTargets }
+        }
         entries = Dictionary(uniqueKeysWithValues: found.map { ($0.snapshot.id, $0) })
         let ordered = found.map(\.snapshot).sorted { lhs, rhs in
             let leftScreen = screens.firstIndex(where: { $0.intersects(lhs.frame) }) ?? 0

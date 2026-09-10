@@ -9,9 +9,14 @@ struct TargetSnapshot: Identifiable, Sendable {
 
 enum TargetPolicy {
     private static let clickRoles: Set<String> = ["AXButton", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXLink", "AXTextField", "AXTextArea", "AXComboBox", "AXSlider", "AXIncrementor", "AXDisclosureTriangle", "AXTab", "AXMenuItem"]
+    private static let structuralRoles: Set<String> = ["AXApplication", "AXWindow", "AXToolbar", "AXTabGroup", "AXScrollArea", "AXWebArea", "AXList", "AXTable", "AXOutline"]
+
+    static func isDistinctControl(role: String) -> Bool {
+        clickRoles.contains(role) || role == "AXRow" || role == "AXCell"
+    }
 
     static func supportsClick(role: String, actions: [String]) -> Bool {
-        clickRoles.contains(role) || actions.contains("AXPress")
+        clickRoles.contains(role) || (!structuralRoles.contains(role) && actions.contains("AXPress"))
     }
 
     static func isEligible(frame: CGRect, enabled: Bool, hidden: Bool, screens: [CGRect]) -> Bool {
