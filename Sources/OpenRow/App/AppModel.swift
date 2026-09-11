@@ -18,6 +18,11 @@ import ServiceManagement
     @ObservationIgnored private let logger = Logger(subsystem: "dev.openrow.OpenRow", category: "Lifecycle")
     @ObservationIgnored private let accessibility = AccessibilityService()
     @ObservationIgnored private let overlay = OverlayController()
+    @ObservationIgnored private let missionControl = MissionControlMonitor()
+    @ObservationIgnored private var missionSession = MissionControlSession()
+    @ObservationIgnored private var missionActive = false
+    @ObservationIgnored private var missionHints = false
+    @ObservationIgnored private let appearanceSound = NSSound(named: "Pop")
     @ObservationIgnored private var input: GlobalInput!
     @ObservationIgnored private var inputStarted = false
     @ObservationIgnored private var observers: [(NotificationCenter, NSObjectProtocol)] = []
@@ -63,10 +68,13 @@ import ServiceManagement
     func start() {
         NSApp.setActivationPolicy(.accessory)
         trackFrontmost()
+        missionControl.screens = { [weak self] in self?.overlay.displays.map(\.quartzFrame) ?? [] }
+        missionControl.onChange = { [weak self] snapshot in self?.missionControlChanged(snapshot) }
         observe(NSWorkspace.shared.notificationCenter, NSWorkspace.didActivateApplicationNotification) { model in
             model.cancel()
             model.trackFrontmost()
             model.updateRouting()
+            model.missionControl.refresh()
         }
         observe(.default, NSApplication.didChangeScreenParametersNotification) { model in
             model.cancel()
@@ -75,6 +83,12 @@ import ServiceManagement
         observe(.default, NSApplication.didBecomeActiveNotification) { model in model.refreshPermissions() }
         observe(NSWorkspace.shared.notificationCenter, NSWorkspace.willSleepNotification) { model in model.cancel() }
         observe(NSWorkspace.shared.notificationCenter, NSWorkspace.sessionDidResignActiveNotification) { model in model.cancel() }
+        observe(NSWorkspace.shared.notificationCenter, NSWorkspace.didLaunchApplicationNotification) { model in
+            if model.canActivate { model.missionControl.start() }
+        }
+        observe(NSWorkspace.shared.notificationCenter, NSWorkspace.didTerminateApplicationNotification) { model in
+            if model.canActivate { model.missionControl.start(); model.missionControl.refresh() }
+        }
         refreshPermissions()
         if !preferences.onboardingCompleted {
             preferences.onboardingCompleted = true
@@ -86,6 +100,7 @@ import ServiceManagement
     func shutdown() {
         cancel()
         input.stop()
+        missionControl.stop()
         observers.forEach { $0.0.removeObserver($0.1) }
         observers.removeAll()
     }
@@ -152,12 +167,14 @@ import ServiceManagement
     }
 
     private func updateRouting() {
+        if canActivate { missionControl.start() } else { missionControl.stop() }
         let frontmost = NSWorkspace.shared.frontmostApplication
         input.configure(mode: mode, enabled: canActivate && isAllowed(frontmost), preferences: preferences)
     }
 
     func activate(_ requested: OpenRowMode) {
         logger.notice("Mode activation requested")
+        if missionActive { cancel(); return }
         if mode == requested { cancel(); return }
         cancel()
         guard canActivate, !IsSecureEventInputEnabled() else {
@@ -212,12 +229,63 @@ import ServiceManagement
         }
     }
 
+    private func missionControlChanged(_ snapshot: MissionControlService.Snapshot) {
+        missionActive = snapshot.active
+        let allowed = canActivate && !IsSecureEventInputEnabled()
+            && isAllowed(NSWorkspace.shared.frontmostApplication)
+            && !preferences.ignoredBundleIDs.contains("com.apple.dock")
+        let effect = missionSession.update(active: snapshot.active, canPresent: allowed, hasTargets: !snapshot.targets.isEmpty)
+        switch effect {
+        case .present:
+            logger.notice("Mission Control presenting cards=\(snapshot.targets.count)")
+            cancel(dismissMissionControl: false)
+            missionHints = true
+            mode = .click
+            targets = snapshot.targets
+            codes = (try? HintAssigner.codes(forCount: targets.count)) ?? []
+            guard codes.count == targets.count else { cancel(); return }
+            updateRouting()
+            drawHints()
+            appearanceSound?.volume = 0.35
+            appearanceSound?.play()
+            overlay.announce("Mission Control. Type a window hint. Escape cancels hints.")
+        case .hide:
+            if missionHints { logger.notice("Mission Control dismissed"); cancel() }
+        case .none:
+            guard missionHints else {
+                // Never leave ordinary app controls over the system window overview.
+                if snapshot.active, mode != .idle { cancel() }
+                return
+            }
+            let byID = Dictionary(uniqueKeysWithValues: snapshot.targets.map { ($0.id, $0) })
+            guard byID.count == targets.count, targets.allSatisfy({ byID[$0.id] != nil }) else { cancel(); return }
+            // Preserve codes across geometry updates; Dock can still be settling.
+            targets = targets.compactMap { byID[$0.id] }
+            drawHints()
+        }
+    }
+
+    private func selectMissionTarget(_ target: TargetSnapshot) {
+        let current = generation
+        let screens = overlay.displays.map(\.quartzFrame)
+        task = Task { [weak self] in
+            guard let self, self.missionHints, self.canActivate, !IsSecureEventInputEnabled(),
+                  self.isAllowed(NSWorkspace.shared.frontmostApplication) else { return }
+            let succeeded = await self.missionControl.service.select(target, screens: screens)
+            guard !Task.isCancelled, self.generation == current else { return }
+            self.cancel()
+            if !succeeded { self.message = "That Mission Control window changed. Reopen Mission Control to try again." }
+        }
+    }
+
     private func contextIsValid(pid: Int32) -> Bool {
         canActivate && !IsSecureEventInputEnabled() && NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
             && isAllowed(NSWorkspace.shared.frontmostApplication)
     }
 
-    func cancel() {
+    func cancel(dismissMissionControl: Bool = true) {
+        if dismissMissionControl { missionSession.dismiss() }
+        missionHints = false
         generation += 1
         task?.cancel()
         task = nil
@@ -283,9 +351,13 @@ import ServiceManagement
         }
     }
 
-    private func drawHints() { overlay.showHints(targets: targets, codes: codes, prefix: prefix, size: preferences.hintSize) }
+    private func drawHints() { overlay.showHints(targets: targets, codes: codes, prefix: prefix, size: preferences.hintSize, missionControl: missionHints) }
 
     private func selectTarget(_ target: TargetSnapshot) {
+        if missionHints {
+            selectMissionTarget(target)
+            return
+        }
         let current = generation
         task = Task { [weak self, accessibility] in
             guard let self else { return }

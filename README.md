@@ -8,7 +8,8 @@ OpenRow stays in the menu bar without a Dock icon. Settings opens on demand; clo
 
 1. Open OpenRow from Applications and allow **Accessibility** and **Input Monitoring** in General. Use the exact System Settings links if needed, then **Restart Input**.
 2. **Control–Option–Shift–Command–J** shows click hints. Type a hint to click its control once. Backspace edits; Escape cancels.
-3. **Control–Option–Shift–Command–K** selects a scroll region. Hold H/J/K/L for left/down/up/right, Shift to dash, Tab to cycle, or 1–9 to select. Release to stop; Escape exits.
+3. Open **Mission Control** to automatically show hints on its window cards. A short Pop plays once; type a hint to select a window. Escape dismisses hints until the next visit.
+4. **Control–Option–Shift–Command–K** selects a scroll region. Hold H/J/K/L for left/down/up/right, Shift to dash, Tab to cycle, or 1–9 to select. Release to stop; Escape exits.
 
 All configuration is in native Settings: shortcuts, label size, speed, dash multiplier, ignored apps, pause, launch at login, permissions, and privacy details. Unsupported apps may expose fewer targets. OpenRow cancels on app/display changes, secure input, pause, and input failure.
 
@@ -54,6 +55,6 @@ Local self-signing does not provide Developer ID distribution or notarization. A
 
 ## Structure and privacy
 
-`SPEC.md` owns behavior; `DESIGN.md` and `DESIGN.html` describe the accepted native interface. `Sources/OpenRow` separates deterministic domain state, input, AX discovery, overlay drawing, actions, Settings, and the app lifecycle. The input callback uses a bounded allow-list and never traverses AX or renders UI. AX handles remain inside one cancellable actor. The only recurring app timer runs while a scroll key is held.
+`SPEC.md` owns behavior; `DESIGN.md` and `DESIGN.html` describe the accepted native interface. `Sources/OpenRow` separates deterministic domain state, input, AX discovery, overlay drawing, actions, Settings, and the app lifecycle. The input callback uses a bounded allow-list and never traverses AX or renders UI. AX handles remain inside one cancellable actor. Scrolling uses a timer only while a scroll key is held. Mission Control supplements Dock notifications with a shallow, serialized accessibility check every 300 ms while OpenRow is available; full card discovery runs only while Mission Control is open.
 
 Preferences stay in local `UserDefaults`. The app reads no UI titles for discovery and logs only counts, durations, and lifecycle status. No production code sends network requests or captures the screen. Local test evidence and app bundles are gitignored.

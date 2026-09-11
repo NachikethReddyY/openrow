@@ -35,6 +35,15 @@ Only activation keys, hint keys, Backspace, and Escape are consumed. Unrelated k
 
 Only the scroll-mode control keys are consumed. Unrelated keys pass through.
 
+## Mission Control
+
+- Opening Mission Control automatically labels the accessible window cards, with brighter yellow, 11 pt hints on each card’s top border. Ordinary click hints retain their configured size and pale styling. No OpenRow shortcut is required.
+- Dock accessibility notifications trigger discovery, backed by a serialized 300 ms check of the top-level `mc` accessibility root because gesture entry can omit notifications. Card traversal under `mc.windows` runs only while that root is present. Monitoring stops while OpenRow is paused, missing permissions, recording a shortcut, or recovering from input failure. No screen capture, private API, or UI titles are used. These system accessibility identifiers are verified on macOS 26 and may change in future releases.
+- Play the native Pop sound once at 35% volume when a nonempty set of hints first appears. Filtering and geometry updates are silent. System mute/output volume still applies.
+- Type a hint to press the original accessible window card. Recheck its identity, geometry, and membership in live Mission Control before acting; never fall back to clicking an old desktop coordinate.
+- Escape dismisses hints for the current visit; leaving Mission Control clears them. Reopening starts a new visit. Pause, secure input, missing permissions, input failure, and an ignored frontmost app prevent automatic hints; ignoring Dock disables the feature.
+- Spaces creation/deletion, App Exposé, and automatic entry into Mission Control remain out of scope.
+
 ## Safety and permissions
 
 - Accessibility is required to discover and revalidate UI targets.
@@ -53,7 +62,7 @@ Every user-editable preference has a native control in the on-demand Settings in
 
 ## Performance budgets
 
-- Idle: no recurring application timer and effectively zero CPU outside system notifications/event-tap callbacks.
+- Idle: a shallow Dock accessibility check every 300 ms while available, serialized with notification-triggered checks; no desktop-wide tree scans. Stop monitoring when paused or unavailable. Keep steady idle CPU near zero.
 - Warm discovery: for 100 targets over 30 runs, first overlay paint p50 <= 150 ms and p95 <= 300 ms; no unexplained run above 750 ms.
 - Input callback: constant-time route lookup with no AX call, allocation-heavy rendering, or synchronous dispatch.
 - Overlay: one reusable nonactivating panel per display; one layer-backed drawing view per panel; no per-hint window.
@@ -61,4 +70,4 @@ Every user-editable preference has a native control in the on-demand Settings in
 
 ## Out of scope for v1
 
-Search, chained clicks, OCR, screen capture, grid navigation, Mission Control automation, remote services, a Mac App Store build, and claims of universal control coverage.
+Search, chained clicks, OCR, screen capture, grid navigation, Mission Control space management, remote services, a Mac App Store build, and claims of universal control coverage.

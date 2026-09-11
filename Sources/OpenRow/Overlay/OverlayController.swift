@@ -50,9 +50,9 @@ struct DisplaySnapshot: Sendable {
 
     func showMessage(_ message: String) { show(.message(message)) }
 
-    func showHints(targets: [TargetSnapshot], codes: [HintCode], prefix: [HintKey], size: HintSize) {
+    func showHints(targets: [TargetSnapshot], codes: [HintCode], prefix: [HintKey], size: HintSize, missionControl: Bool = false) {
         let labels = codes.map { $0.keys.map { KeyboardLayout.label(for: $0.keyCode) }.joined() }
-        show(.hints(targets, labels, HintFilter.states(for: codes, prefix: prefix), size.points))
+        show(.hints(targets, labels, HintFilter.states(for: codes, prefix: prefix), missionControl ? 11 : size.points, missionControl))
     }
 
     func showRegions(_ targets: [TargetSnapshot], selected: Int) { show(.regions(targets, selected)) }
@@ -76,7 +76,7 @@ struct DisplaySnapshot: Sendable {
     enum Content {
         case none
         case message(String)
-        case hints([TargetSnapshot], [String], [HintFilterState], CGFloat)
+        case hints([TargetSnapshot], [String], [HintFilterState], CGFloat, Bool)
         case regions([TargetSnapshot], Int)
     }
     var display = DisplaySnapshot(cocoaFrame: .zero, quartzFrame: .zero, primaryMaxY: 0)
@@ -89,7 +89,7 @@ struct DisplaySnapshot: Sendable {
         switch content {
         case .none: break
         case let .message(message): drawHUD(message)
-        case let .hints(targets, labels, states, size):
+        case let .hints(targets, labels, states, size, missionControl):
             var occupied: [CGRect] = []
             let components = targets.map { localRect($0.contentFrame ?? $0.frame) }
             for index in targets.indices {
@@ -98,15 +98,25 @@ struct DisplaySnapshot: Sendable {
                       display.quartzFrame.contains(point) else { continue }
                 let local = ScreenGeometry.localPoint(fromQuartz: point, inCocoaScreenFrame: display.cocoaFrame,
                     primaryScreenMaxY: display.primaryMaxY)
-                let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: size, weight: .medium), .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 1)]
+                let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: size, weight: missionControl ? .semibold : .medium), .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 1)]
                 let measured = (labels[index] as NSString).size(withAttributes: attributes)
-                let placement = HintLayout.place(at: local, size: CGSize(width: measured.width + 4, height: measured.height + 2),
-                    bounds: bounds.insetBy(dx: 1, dy: 1), occupied: occupied, components: components, preferredSide: target.hintSide)
+                let badgeSize = CGSize(width: measured.width + 4, height: measured.height + 2)
+                let placement: HintPlacement
+                if missionControl {
+                    // The badge identifies the whole card; selection still presses its AX owner.
+                    let rect = HintLayout.borderBadge(in: localRect(target.frame), size: badgeSize, bounds: bounds.insetBy(dx: 1, dy: 1))
+                    placement = HintPlacement(rect: rect, tip: local, side: .above)
+                } else {
+                    placement = HintLayout.place(at: local, size: badgeSize,
+                        bounds: bounds.insetBy(dx: 1, dy: 1), occupied: occupied, components: components, preferredSide: target.hintSide)
+                }
                 occupied.append(placement.rect)
-                let color = NSColor(calibratedRed: 0.96, green: 0.90, blue: 0.67, alpha: 1)
+                let color = missionControl
+                    ? NSColor(calibratedRed: 1, green: 0.93, blue: 0.45, alpha: 1)
+                    : NSColor(calibratedRed: 0.96, green: 0.90, blue: 0.67, alpha: 1)
                 drawCallout(labels[index], placement: placement, attributes: attributes,
                     fill: color, dimmed: states[index] == .dimmed,
-                    selected: states[index] == .selected)
+                    selected: states[index] == .selected, showsPointer: !missionControl)
             }
         case let .regions(targets, selected):
             for (index, target) in targets.enumerated() where display.quartzFrame.intersects(target.frame) {
@@ -132,7 +142,7 @@ struct DisplaySnapshot: Sendable {
     }
 
     private func drawCallout(_ label: String, placement: HintPlacement, attributes: [NSAttributedString.Key: Any],
-                             fill: NSColor, dimmed: Bool, selected: Bool) {
+                             fill: NSColor, dimmed: Bool, selected: Bool, showsPointer: Bool = true) {
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current?.cgContext.setAlpha(dimmed ? 0.24 : 1)
@@ -146,11 +156,11 @@ struct DisplaySnapshot: Sendable {
         pointer.line(to: CGPoint(x: base.x + dx, y: base.y + dy))
         pointer.close()
         fill.setFill()
-        pointer.fill()
+        if showsPointer { pointer.fill() }
         (selected ? NSColor.systemBlue : NSColor(calibratedWhite: 0.25, alpha: 0.55)).setStroke()
         pointer.lineWidth = selected ? 1.5 : 0.6
         pointer.lineJoinStyle = .round
-        pointer.stroke()
+        if showsPointer { pointer.stroke() }
         let badge = NSBezierPath(roundedRect: placement.rect, xRadius: 3.5, yRadius: 3.5)
         badge.lineWidth = selected ? 1.5 : 0.6
         badge.fill()
