@@ -20,6 +20,13 @@ struct HintPlacement {
 }
 
 enum HintLayout {
+    /// Center the Mission Control badge across the top border, clamped to its display.
+    static func borderBadge(in card: CGRect, size: CGSize, bounds: CGRect) -> CGRect {
+        CGRect(x: min(max(bounds.minX, card.midX - size.width / 2), bounds.maxX - size.width),
+            y: min(max(bounds.minY, card.maxY - size.height / 2), bounds.maxY - size.height),
+            width: size.width, height: size.height)
+    }
+
     /// Cocoa coordinates. Placement never changes the click point, even at screen edges.
     static func place(at point: CGPoint, size: CGSize, bounds: CGRect, occupied: [CGRect],
                       components: [CGRect] = [], preferredSide: HintSide = .above) -> HintPlacement {

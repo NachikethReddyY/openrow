@@ -1,5 +1,29 @@
 # OpenRow work
 
+## 2026-09-11 — Mission Control hint appearance follow-up
+
+- [x] User confirmed automatic hints are now visible.
+- [x] Move Mission Control labels onto top borders; use brighter yellow and 11 pt text only there.
+- [x] Verify the actual AppKit renderer on representative card borders and restart the signed local build.
+
+Proof: 20 focused checks passed; native-rendered `.evidence/mission-control/appearance.png` shows brighter 11 pt labels straddling top borders. Border-centering and display-edge clamping checks passed. Signed local build restarted as PID 17922. Live Mission Control appearance after this styling change still needs user confirmation; automatic appearance was confirmed by the user before this change.
+
+Correction: centered, small labels were insufficiently distinct. Project guidance updated in DESIGN.md/HTML and SPEC.md; ordinary hints and card selection remain protected.
+
+## 2026-09-11 — automatic Mission Control hints
+
+- [x] Inspect Dock accessibility and Mission Control lifecycle on this Mac.
+- [x] Add focused regressions for automatic entry, cancellation, unknown targets, and one presentation/sound per visit.
+- [x] Implement automatic Mission Control window hints with a short appearance sound; preserve ordinary click/scroll behavior.
+- [x] Diagnose the user-observed missing activation in the running build; instrument notification and presentation boundaries.
+- [ ] Verify native Mission Control presentation/selection and focused regressions; synchronize behavior documentation.
+
+Validation so far: signed release build; 59 checks now pass, including the new no-notification/stop regression (10 opt-in live tests skipped). Pop audio has about 0.2 seconds of audible content. Dock tree inspection confirmed `mc.windows` cards and selected-children notifications. Runtime selection, overlay visibility, and audible output remain unverified: automation changes focus, and the first live test ran with Mission Control closed. The notification-only live entry test timed out after the user reported entering Mission Control. The fallback build is running as PID 6417; a later live observation did not capture an open session, so visible hints, selection, and sound remain unverified. Documentation synchronized. Evidence: `.evidence/mission-control/`.
+
+Correction: user observed no hints or sound. The notification-only entry criterion failed; a bounded, shallow 300 ms fallback now detects entry independently of AX notifications. Classified as project guidance in SPEC.md/README.md.
+
+Scope clarification: “sound animation” means a short sound when hints appear, not an equalizer or a new visual style (one-off request).
+
 ## 2026-09-10 — remove false scroll regions and tighten hint attachment (PR #2)
 
 - [x] Reproduce document-text overflow and identify a reliable viewport boundary.
