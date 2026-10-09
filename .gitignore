@@ -1,0 +1,11 @@
+# Fleet-local and generated planning evidence
+.scratch/
+.evidence/
+artifacts/
+
+# Xcode / macOS build output (for the implementation thread)
+.DS_Store
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
